@@ -31,12 +31,6 @@ pub struct TradingPair {
     pub price_asset: Asset,
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub struct Spread {
-    pub bid: Decimal,
-    pub ask: Decimal,
-}
-
 #[derive(Debug)]
 pub struct Event {
     pub status: OrderStatus,
