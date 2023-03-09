@@ -10,6 +10,7 @@ pub trait OrderQueue {
     fn peek(&self) -> Option<&Order>;
     fn pop(&mut self) -> Option<Order>;
     fn remove(&mut self, order_id: OrderId) -> Option<Order>;
+    fn find(&self, order_id: OrderId) -> Option<&Order>;
 }
 
 pub struct PriceTimePriorityOrderQueue {
@@ -57,8 +58,8 @@ impl OrderQueue for PriceTimePriorityOrderQueue {
 
     fn remove(&mut self, order_id: OrderId) -> Option<Order> {
         if let Some(order) = self.orders.remove(&order_id) {
-            // This creates a copy of the elements in the heap to satisfy the borrow checker. 
-            // I'm new to rust so i'll keep this until i find a much better way. Need to figure out 
+            // This creates a copy of the elements in the heap to satisfy the borrow checker.
+            // I'm new to rust so i'll keep this until i find a much better way. Need to figure out
             // a way to not do this needless copy. And just modify using a reference to the existing data
             let mut key_vec = self.heap.to_owned().into_vec();
             key_vec.retain(|k| k.order_id != order.order_id);
@@ -66,6 +67,10 @@ impl OrderQueue for PriceTimePriorityOrderQueue {
             return Some(order);
         }
         None
+    }
+
+    fn find(&self, order_id: OrderId) -> Option<&Order> {
+        self.orders.get(&order_id)
     }
 }
 

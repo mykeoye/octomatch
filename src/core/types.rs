@@ -35,6 +35,8 @@ pub enum OrderStatus {
 
 #[derive(Debug, PartialEq)]
 pub enum Failure<'a> {
+    InvalidOrderForBook,
     OrderNotFound(&'a str),
     OrderRejected(&'a str),
+    UnsupportedOperation(&'a str),
 }
