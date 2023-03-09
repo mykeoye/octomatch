@@ -1,8 +1,7 @@
-
 pub type OrderId = u64;
 pub type Long = u64;
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub enum Asset {
     BTC,
     ETH,
@@ -17,6 +16,7 @@ pub enum OrderSide {
     Ask,
 }
 
+#[derive(Eq, PartialEq, PartialOrd, Ord, Clone, Debug, Copy)]
 pub enum OrderType {
     Market,
     Limit,
@@ -26,14 +26,15 @@ pub enum OrderType {
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub enum OrderStatus {
     Created,
-    Filled, 
-    PartialFilled, 
-    Canceled, 
+    Filled,
+    PartialFilled,
+    Canceled,
     Rejected,
     Expired,
 }
 
-#[derive(Debug)]
-pub enum Failure {
-    OrderNotFound(String)
+#[derive(Debug, PartialEq)]
+pub enum Failure<'a> {
+    OrderNotFound(&'a str),
+    OrderRejected(&'a str),
 }

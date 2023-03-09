@@ -1,46 +1,48 @@
-use std::{fmt::Debug, cmp::Ordering};
 use rust_decimal::Decimal;
+use std::{cmp::Ordering, fmt::Debug};
 
-use super::types::{OrderId, OrderSide, Long, OrderStatus, Asset};
- 
+use super::types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType};
+
 #[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub struct Order {
     pub order_id: OrderId,
     pub price: Decimal,
     pub quantity: Long,
     pub side: OrderSide,
+    pub order_type: OrderType,
     pub timestamp: Long,
+    pub trading_pair: TradingPair,
 }
 
 impl Order {
     pub fn to_key(&self) -> OrderKey {
-        OrderKey { 
-            order_id: self.order_id, 
-            price: self.price, 
-            side: self.side, 
-            timestamp: 
-            self.timestamp 
+        OrderKey {
+            order_id: self.order_id,
+            price: self.price,
+            side: self.side,
+            timestamp: self.timestamp,
         }
     }
 }
 
+#[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub struct TradingPair {
-    order_asset: Asset,
-    price_asset: Asset,
+    pub order_asset: Asset,
+    pub price_asset: Asset,
 }
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Spread {
-    bid: Decimal,
-    ask: Decimal
+    pub bid: Decimal,
+    pub ask: Decimal,
 }
 
 #[derive(Debug)]
 pub struct Event {
-    status: OrderStatus,
-    order_id: OrderId,
+    pub status: OrderStatus,
+    pub order_id: OrderId,
+    pub at_price: String,
 }
-
 
 #[derive(Clone, Eq, Copy, Debug)]
 pub struct OrderKey {
@@ -51,7 +53,7 @@ pub struct OrderKey {
 }
 
 // The ordering determines how the orders are arranged in the queue. For price time priority
-// ordering, we want orders inserted based on the price and the time of entry. For Bids this 
+// ordering, we want orders inserted based on the price and the time of entry. For Bids this
 // means the highest price gets the top priority, for Asks the lowest price gets the top priority
 // For orders with the same price, the longest staying in the queue gets the higher priority
 impl Ord for OrderKey {
@@ -59,7 +61,7 @@ impl Ord for OrderKey {
         if self.price > other.price {
             match self.side {
                 OrderSide::Bid => Ordering::Greater,
-                OrderSide::Ask => Ordering::Less
+                OrderSide::Ask => Ordering::Less,
             }
         } else if self.price < other.price {
             match self.side {
@@ -80,9 +82,9 @@ impl PartialOrd for OrderKey {
 
 impl PartialEq for OrderKey {
     fn eq(&self, other: &Self) -> bool {
-        self.order_id == other.order_id 
-        && self.price == other.price 
-        && self.side == other.side
-        && self.timestamp == other.timestamp
+        self.order_id == other.order_id
+            && self.price == other.price
+            && self.side == other.side
+            && self.timestamp == other.timestamp
     }
 }

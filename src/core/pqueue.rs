@@ -1,7 +1,10 @@
+use super::model::{Order, OrderKey};
+use super::types::OrderId;
 use std::collections::{BinaryHeap, HashMap};
-use super::model::{OrderKey, Order};
-use super::types::{OrderId};
 
+/// Defines the operations to be performed by an order queue. The implementation of this
+/// is a priority queue that orders items based on some defined prioritization strategy
+/// this is left entirely to the implementation of this trait
 pub trait OrderQueue {
     fn push(&mut self, order: Order);
     fn peek(&self) -> Option<&Order>;
@@ -15,13 +18,13 @@ pub struct PriceTimePriorityOrderQueue {
 }
 
 impl PriceTimePriorityOrderQueue {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             heap: BinaryHeap::with_capacity(16),
             orders: HashMap::with_capacity(16),
         }
     }
-    fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
             heap: BinaryHeap::with_capacity(capacity),
             orders: HashMap::with_capacity(capacity),
@@ -30,7 +33,6 @@ impl PriceTimePriorityOrderQueue {
 }
 
 impl OrderQueue for PriceTimePriorityOrderQueue {
-
     fn push(&mut self, order: Order) {
         if self.orders.contains_key(&order.order_id) {
             return;
@@ -41,27 +43,27 @@ impl OrderQueue for PriceTimePriorityOrderQueue {
 
     fn peek(&self) -> Option<&Order> {
         if let Some(key) = self.heap.peek() {
-            return self.orders.get(&key.order_id)
+            return self.orders.get(&key.order_id);
         }
         None
     }
 
     fn pop(&mut self) -> Option<Order> {
         if let Some(key) = self.heap.pop() {
-            return self.orders.remove(&key.order_id)
+            return self.orders.remove(&key.order_id);
         }
         None
     }
 
     fn remove(&mut self, order_id: OrderId) -> Option<Order> {
         if let Some(order) = self.orders.remove(&order_id) {
-            // This creates a copy of the elements in the heap to satisfy the borrow checker.
-            // i'm new to rust so i let this slide. Need to figure out a way to not do this
-            // needless copy. And just modify using a reference to the existing data
+            // This creates a copy of the elements in the heap to satisfy the borrow checker. 
+            // I'm new to rust so i'll keep this until i find a much better way. Need to figure out 
+            // a way to not do this needless copy. And just modify using a reference to the existing data
             let mut key_vec = self.heap.to_owned().into_vec();
             key_vec.retain(|k| k.order_id != order.order_id);
             self.heap = BinaryHeap::from(key_vec);
-            return Some(order)
+            return Some(order);
         }
         None
     }
@@ -69,9 +71,12 @@ impl OrderQueue for PriceTimePriorityOrderQueue {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use crate::core::{
+        model::TradingPair,
+        types::{Asset, OrderSide, OrderType},
+    };
     use rust_decimal::Decimal;
-    use crate::core::types::OrderSide;
+    use std::str::FromStr;
 
     use super::*;
 
@@ -80,26 +85,39 @@ mod test {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
         let orders = vec![
-            Order { 
-                order_id: 8, 
+            Order {
+                order_id: 8,
                 price: Decimal::from_str("200.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 4,
-                timestamp: 1678170180000
+                order_type: OrderType::Limit,
+                timestamp: 1678170180000,
+                trading_pair: TradingPair {
+                    order_asset: Asset::BTC,
+                    price_asset: Asset::USDC,
+                },
             },
             Order {
                 order_id: 9,
                 price: Decimal::from_str("300.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 10,
-                timestamp: 1680848580000
-            }
+                order_type: OrderType::Limit,
+                timestamp: 1680848580000,
+                trading_pair: TradingPair {
+                    order_asset: Asset::DOT,
+                    price_asset: Asset::USDT,
+                },
+            },
         ];
 
         orders.iter().for_each(|key| pq.push(*key));
 
         let head: Order = *pq.peek().unwrap();
-        assert_eq!(orders[1], head, "Asserting that the item at the head of the queue is the order with the highest price");
+        assert_eq!(
+            orders[1], head,
+            "Asserting that the item at the head of the queue is the order with the highest price"
+        );
     }
 
     #[test]
@@ -107,20 +125,30 @@ mod test {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
         let orders = vec![
-            Order { 
-                order_id: 8, 
+            Order {
+                order_id: 8,
                 price: Decimal::from_str("200.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 8,
-                timestamp: 1678170180000
+                order_type: OrderType::Limit,
+                timestamp: 1678170180000,
+                trading_pair: TradingPair {
+                    order_asset: Asset::DOT,
+                    price_asset: Asset::USDT,
+                },
             },
             Order {
                 order_id: 9,
                 price: Decimal::from_str("200.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 12,
-                timestamp: 1680848580000
-            }
+                order_type: OrderType::Limit,
+                timestamp: 1680848580000,
+                trading_pair: TradingPair {
+                    order_asset: Asset::ETH,
+                    price_asset: Asset::USDT,
+                },
+            },
         ];
 
         orders.iter().for_each(|key| pq.push(*key));
@@ -133,12 +161,17 @@ mod test {
     fn orders_can_be_removed_from_queue_if_they_are_canceled() {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
-        let order = Order { 
-            order_id: 8, 
+        let order = Order {
+            order_id: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
-            timestamp: 1678170180000
+            order_type: OrderType::Limit,
+            timestamp: 1678170180000,
+            trading_pair: TradingPair {
+                order_asset: Asset::DOT,
+                price_asset: Asset::USDT,
+            },
         };
 
         pq.push(order);
@@ -152,12 +185,17 @@ mod test {
     fn orders_can_be_poped_from_queue_when_needed() {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
-        let order = Order { 
-            order_id: 8, 
+        let order = Order {
+            order_id: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
-            timestamp: 1678170180000
+            order_type: OrderType::Limit,
+            timestamp: 1678170180000,
+            trading_pair: TradingPair {
+                order_asset: Asset::ETH,
+                price_asset: Asset::USDC,
+            },
         };
 
         pq.push(order);
