@@ -1,18 +1,21 @@
-use rust_decimal::Decimal;
 use super::{
     model::{Event, Order, TradingPair},
     pqueue::{OrderQueue, PriceTimePriorityOrderQueue},
-    types::{Failure, OrderId, OrderSide, OrderStatus, OrderType},
+    types::{Failure, Long, OrderId, OrderSide, OrderStatus, OrderType},
 };
+use rust_decimal::Decimal;
 
 const ORDER_BOOK_INITIAL_CAPACITY: usize = 512;
 
 pub trait OrderBook {
-    fn cancel(&mut self, order_id: OrderId) -> Result<Event, Failure>;
+    fn cancel(&mut self, orderid: OrderId) -> Result<Event, Failure>;
     fn place(&mut self, order: Order) -> Result<Event, Failure>;
     fn peek_top_ask(&self) -> Option<&Order>;
     fn peek_top_bid(&self) -> Option<&Order>;
     fn get_spread(&self) -> Option<Decimal>;
+    fn modify_quantity(&mut self, orderid: OrderId, qty: Long);
+    fn pop_top_bid(&mut self) -> Option<Order>;
+    fn pop_top_ask(&mut self) -> Option<Order>;
 }
 
 pub struct LimitOrderBook {
@@ -32,21 +35,21 @@ impl LimitOrderBook {
 }
 
 impl OrderBook for LimitOrderBook {
-    fn cancel(&mut self, order_id: OrderId) -> Result<Event, Failure> {
+    fn cancel(&mut self, orderid: OrderId) -> Result<Event, Failure> {
         // check the bid queues to see if we can find the order
-        if let Some(_) = self.bids.find(order_id) {
-            self.bids.remove(order_id);
+        if let Some(order) = self.bids.find(orderid) {
+            self.bids.remove(order.orderid);
             return Ok(Event {
-                order_id,
+                orderid,
                 status: OrderStatus::Canceled,
                 at_price: String::from(""),
             });
         }
         // else we check the ask queues to see if we can find it there
-        if let Some(_) = self.asks.find(order_id) {
-            self.asks.remove(order_id);
+        if let Some(order) = self.asks.find(orderid) {
+            self.asks.remove(order.orderid);
             return Ok(Event {
-                order_id,
+                orderid,
                 status: OrderStatus::Canceled,
                 at_price: String::from(""),
             });
@@ -66,7 +69,7 @@ impl OrderBook for LimitOrderBook {
         };
         Ok(Event {
             status: OrderStatus::Created,
-            order_id: order.order_id,
+            orderid: order.orderid,
             at_price: String::from(""),
         })
     }
@@ -87,6 +90,23 @@ impl OrderBook for LimitOrderBook {
 
     fn peek_top_bid(&self) -> Option<&Order> {
         self.bids.peek()
+    }
+
+    fn modify_quantity(&mut self, orderid: OrderId, quantity: Long) {
+        if let Some(order) = self.bids.find(orderid) {
+            self.bids.modify_quantity(order.orderid, quantity)
+        }
+        if let Some(order) = self.asks.find(orderid) {
+            self.asks.modify_quantity(order.orderid, quantity)
+        }
+    }
+
+    fn pop_top_bid(&mut self) -> Option<Order> {
+        self.bids.pop()
+    }
+
+    fn pop_top_ask(&mut self) -> Option<Order> {
+        self.asks.pop()
     }
 }
 
@@ -111,7 +131,7 @@ mod test {
         });
 
         let result = orderbook.place(Order {
-            order_id: 8,
+            orderid: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
@@ -135,7 +155,7 @@ mod test {
         });
 
         let result = orderbook.place(Order {
-            order_id: 8,
+            orderid: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
@@ -162,7 +182,7 @@ mod test {
         });
 
         let result = orderbook.place(Order {
-            order_id: 8,
+            orderid: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
@@ -175,7 +195,7 @@ mod test {
         });
 
         let event = result.unwrap();
-        let result = orderbook.cancel(event.order_id);
+        let result = orderbook.cancel(event.orderid);
 
         let event = result.unwrap();
         assert_eq!(OrderStatus::Canceled, event.status);
@@ -200,7 +220,7 @@ mod test {
         });
 
         let result = orderbook.place(Order {
-            order_id: 8,
+            orderid: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
@@ -227,7 +247,7 @@ mod test {
 
         let orders = vec![
             Order {
-                order_id: 8,
+                orderid: 8,
                 price: Decimal::from_str("200.02").unwrap(),
                 side: OrderSide::Ask,
                 quantity: 8,
@@ -239,7 +259,7 @@ mod test {
                 },
             },
             Order {
-                order_id: 18,
+                orderid: 18,
                 price: Decimal::from_str("100.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 8,

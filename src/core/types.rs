@@ -1,3 +1,5 @@
+use rust_decimal::Decimal;
+
 pub type OrderId = u64;
 pub type Long = u64;
 
@@ -8,6 +10,16 @@ pub enum Asset {
     USDT,
     USDC,
     DOT,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Trade {
+    pub orderid: OrderId,
+    pub side: OrderSide,
+    pub price: Decimal,
+    pub status: OrderStatus,
+    pub quantity: Long,
+    pub timestamp: Long,
 }
 
 #[derive(Eq, PartialEq, PartialOrd, Ord, Clone, Debug, Copy)]
@@ -27,7 +39,7 @@ pub enum OrderType {
 pub enum OrderStatus {
     Created,
     Filled,
-    PartialFilled,
+    PartialFill,
     Canceled,
     Rejected,
     Expired,

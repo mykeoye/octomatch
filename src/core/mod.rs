@@ -1,3 +1,4 @@
+pub mod matcher;
 pub mod model;
 pub mod orderbook;
 pub mod pqueue;

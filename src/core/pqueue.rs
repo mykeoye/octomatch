@@ -1,5 +1,5 @@
 use super::model::{Order, OrderKey};
-use super::types::OrderId;
+use super::types::{Long, OrderId};
 use std::collections::{BinaryHeap, HashMap};
 
 /// Defines the operations to be performed by an order queue. The implementation of this
@@ -9,8 +9,9 @@ pub trait OrderQueue {
     fn push(&mut self, order: Order);
     fn peek(&self) -> Option<&Order>;
     fn pop(&mut self) -> Option<Order>;
-    fn remove(&mut self, order_id: OrderId) -> Option<Order>;
-    fn find(&self, order_id: OrderId) -> Option<&Order>;
+    fn remove(&mut self, orderid: OrderId) -> Option<Order>;
+    fn find(&self, orderid: OrderId) -> Option<&Order>;
+    fn modify_quantity(&mut self, orderid: OrderId, quantity: Long);
 }
 
 pub struct PriceTimePriorityOrderQueue {
@@ -35,42 +36,48 @@ impl PriceTimePriorityOrderQueue {
 
 impl OrderQueue for PriceTimePriorityOrderQueue {
     fn push(&mut self, order: Order) {
-        if self.orders.contains_key(&order.order_id) {
+        if self.orders.contains_key(&order.orderid) {
             return;
         }
         self.heap.push(order.to_key());
-        self.orders.insert(order.order_id, order);
+        self.orders.insert(order.orderid, order);
     }
 
     fn peek(&self) -> Option<&Order> {
         if let Some(key) = self.heap.peek() {
-            return self.orders.get(&key.order_id);
+            return self.orders.get(&key.orderid);
         }
         None
     }
 
     fn pop(&mut self) -> Option<Order> {
         if let Some(key) = self.heap.pop() {
-            return self.orders.remove(&key.order_id);
+            return self.orders.remove(&key.orderid);
         }
         None
     }
 
-    fn remove(&mut self, order_id: OrderId) -> Option<Order> {
-        if let Some(order) = self.orders.remove(&order_id) {
+    fn remove(&mut self, orderid: OrderId) -> Option<Order> {
+        if let Some(order) = self.orders.remove(&orderid) {
             // This creates a copy of the elements in the heap to satisfy the borrow checker.
             // I'm new to rust so i'll keep this until i find a much better way. Need to figure out
             // a way to not do this needless copy. And just modify using a reference to the existing data
             let mut key_vec = self.heap.to_owned().into_vec();
-            key_vec.retain(|k| k.order_id != order.order_id);
+            key_vec.retain(|k| k.orderid != order.orderid);
             self.heap = BinaryHeap::from(key_vec);
             return Some(order);
         }
         None
     }
 
-    fn find(&self, order_id: OrderId) -> Option<&Order> {
-        self.orders.get(&order_id)
+    fn find(&self, orderid: OrderId) -> Option<&Order> {
+        self.orders.get(&orderid)
+    }
+
+    fn modify_quantity(&mut self, orderid: OrderId, quantity: Long) {
+        if let Some(order) = self.orders.get_mut(&orderid) {
+            order.quantity = quantity;
+        }
     }
 }
 
@@ -91,7 +98,7 @@ mod test {
 
         let orders = vec![
             Order {
-                order_id: 8,
+                orderid: 8,
                 price: Decimal::from_str("200.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 4,
@@ -103,7 +110,7 @@ mod test {
                 },
             },
             Order {
-                order_id: 9,
+                orderid: 9,
                 price: Decimal::from_str("300.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 10,
@@ -131,7 +138,7 @@ mod test {
 
         let orders = vec![
             Order {
-                order_id: 8,
+                orderid: 8,
                 price: Decimal::from_str("200.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 8,
@@ -143,7 +150,7 @@ mod test {
                 },
             },
             Order {
-                order_id: 9,
+                orderid: 9,
                 price: Decimal::from_str("200.02").unwrap(),
                 side: OrderSide::Bid,
                 quantity: 12,
@@ -167,7 +174,7 @@ mod test {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
         let order = Order {
-            order_id: 8,
+            orderid: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
@@ -182,7 +189,7 @@ mod test {
         pq.push(order);
         assert_eq!(order, *pq.peek().unwrap());
 
-        pq.remove(order.order_id);
+        pq.remove(order.orderid);
         assert_eq!(None, pq.peek());
     }
 
@@ -191,7 +198,7 @@ mod test {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
         let order = Order {
-            order_id: 8,
+            orderid: 8,
             price: Decimal::from_str("200.02").unwrap(),
             side: OrderSide::Bid,
             quantity: 8,
