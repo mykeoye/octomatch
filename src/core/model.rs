@@ -5,7 +5,7 @@ use super::types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType};
 
 #[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub struct Order {
-    pub order_id: OrderId,
+    pub orderid: OrderId,
     pub price: Decimal,
     pub quantity: Long,
     pub side: OrderSide,
@@ -17,7 +17,7 @@ pub struct Order {
 impl Order {
     pub fn to_key(&self) -> OrderKey {
         OrderKey {
-            order_id: self.order_id,
+            orderid: self.orderid,
             price: self.price,
             side: self.side,
             timestamp: self.timestamp,
@@ -34,13 +34,23 @@ pub struct TradingPair {
 #[derive(Debug)]
 pub struct Event {
     pub status: OrderStatus,
-    pub order_id: OrderId,
+    pub orderid: OrderId,
     pub at_price: String,
+}
+
+impl Default for Event {
+    fn default() -> Self {
+        Self {
+            status: OrderStatus::Canceled,
+            orderid: Default::default(),
+            at_price: Default::default(),
+        }
+    }
 }
 
 #[derive(Clone, Eq, Copy, Debug)]
 pub struct OrderKey {
-    pub order_id: OrderId,
+    pub orderid: OrderId,
     pub price: Decimal,
     pub side: OrderSide,
     pub timestamp: Long,
@@ -76,7 +86,7 @@ impl PartialOrd for OrderKey {
 
 impl PartialEq for OrderKey {
     fn eq(&self, other: &Self) -> bool {
-        self.order_id == other.order_id
+        self.orderid == other.orderid
             && self.price == other.price
             && self.side == other.side
             && self.timestamp == other.timestamp
