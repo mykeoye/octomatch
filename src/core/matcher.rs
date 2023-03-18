@@ -1,83 +1,184 @@
+use std::fmt::Debug;
+
 use super::{
     model::Order,
-    orderbook::OrderBook,
-    types::{OrderSide, OrderStatus, OrderType, Trade},
+    orderbook::{LimitOrderBook, OrderBook},
+    types::{Long, OrderSide, OrderStatus, OrderType, Trade},
 };
+
+/// A match is a structure which contains a list of executed orders (trades) as well as fields
+/// indicating if the match was done in full or partially, along with the quantity left
+#[derive(Debug)]
+pub struct Match<T> {
+    matches: Vec<T>,
+    state: MatchState,
+    qty_left: Long,
+}
+
+impl<T> Match<T>
+where
+    T: Clone + Debug + Copy,
+{
+    pub fn new() -> Self {
+        Self {
+            matches: Vec::with_capacity(4),
+            state: MatchState::NoMatch,
+            qty_left: 0,
+        }
+    }
+
+    pub fn add_match(&mut self, trade: T) {
+        self.matches.push(trade)
+    }
+
+    pub fn get_matches(&self) -> Vec<T> {
+        self.matches.clone()
+    }
+
+    pub fn update_state(&mut self, state: MatchState) {
+        match state {
+            MatchState::Full | MatchState::NoMatch => self.update_qty_left(0),
+            MatchState::Partial => (),
+        }
+        self.state = state
+    }
+
+    pub fn get_state(&self) -> MatchState {
+        self.state.clone()
+    }
+
+    pub fn update_qty_left(&mut self, qty: Long) {
+        self.qty_left = qty
+    }
+
+    pub fn get_qty_left(&self) -> Long {
+        self.qty_left
+    }
+
+    pub fn is_partial(&self) -> bool {
+        self.state == MatchState::Partial
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum MatchState {
+    Full,
+    Partial,
+    NoMatch,
+}
 
 pub struct Matcher {}
 
 impl Matcher {
-    pub fn match_order(&self, order: Order, orderbook: &mut dyn OrderBook) -> Vec<Trade> {
-        let mut trades: Vec<Trade> = Vec::with_capacity(4);
+    pub fn match_order(&self, order: Order, orderbook: &mut dyn OrderBook) -> Match<Trade> {
+        let mut matches = Match::new();
         match order.order_type {
-            OrderType::Market => match order.side {
-                OrderSide::Bid => match orderbook.peek_top_ask() {
-                    Some(ask) => Self::do_match(order, ask.clone(), orderbook, &mut trades),
-                    None => {}
-                },
-                OrderSide::Ask => match orderbook.peek_top_bid() {
-                    Some(bid) => Self::do_match(order, bid.clone(), orderbook, &mut trades),
-                    None => {}
-                },
-            },
-            OrderType::Limit => match orderbook.place(order) {
-                Ok(_) => todo!(),
-                Err(_) => todo!(),
-            },
+            // a market order is matched immediately at the best available price. In cases
+            // where the engine is unable to fill the match completely, the order is partially
+            // filled and the remaining part of the order is left on the book
+            OrderType::Market => {
+                if let Some(opp_order) = Self::get_opposite_order(order.side, orderbook) {
+                    Self::do_match(order, opp_order.clone(), orderbook, &mut matches)
+                }
+                // an early return with the state being MatchState::NoMatch
+                return matches;
+            }
+            // a limit order is first matched immediately if possible and if not it is placed into
+            // the limit order book to be filled at a later time, when a matching market order is found
+            OrderType::Limit => {
+                if let Some(opp_order) = Self::get_opposite_order(order.side, orderbook) {
+                    // first we do price check to ensure the price variant of the limit order is maintained
+                    if Self::is_within_price_limit(order, *opp_order) {
+                        Self::do_match(order, opp_order.clone(), orderbook, &mut matches);
+                        // if there's a partial match we want to place the remnants on the orderbook
+                        if MatchState::Partial == matches.get_state() {
+                            let mut left_over = order.clone();
+                            left_over.quantity = matches.get_qty_left();
+                            let _ = orderbook.place(left_over);
+                        }
+                        return matches;
+                    }
+                }
+                let _ = orderbook.place(order);
+                // an early return with the state being MatchState::NoMatch
+                return matches;
+            }
             OrderType::Stop => todo!(),
         }
-        trades
+    }
+
+    fn get_opposite_order(side: OrderSide, orderbook: &mut dyn OrderBook) -> Option<&Order> {
+        match side {
+            OrderSide::Bid => orderbook.peek_top_ask(),
+            OrderSide::Ask => orderbook.peek_top_bid(),
+        }
+    }
+
+    fn is_within_price_limit(order: Order, opp_order: Order) -> bool {
+        match order.side {
+            OrderSide::Bid => order.price >= opp_order.price,
+            OrderSide::Ask => order.price <= opp_order.price,
+        }
     }
 
     fn do_match(
-        mut left: Order,
-        right: Order,
+        mut incoming_order: Order,
+        opposite_order: Order,
         orderbook: &mut dyn OrderBook,
-        trades: &mut Vec<Trade>,
+        matches: &mut Match<Trade>,
     ) {
-        if left.quantity < right.quantity {
-            trades.push(Trade {
-                orderid: left.orderid,
-                side: left.side,
-                price: left.price,
+        if incoming_order.quantity < opposite_order.quantity {
+            matches.add_match(Trade {
+                orderid: incoming_order.orderid,
+                side: incoming_order.side,
+                price: opposite_order.price,
                 status: OrderStatus::Filled,
-                quantity: left.quantity,
+                quantity: incoming_order.quantity,
                 timestamp: 0,
             });
 
-            trades.push(Trade {
-                orderid: right.orderid,
-                side: right.side,
-                price: right.price,
+            matches.add_match(Trade {
+                orderid: opposite_order.orderid,
+                side: opposite_order.side,
+                price: opposite_order.price,
                 status: OrderStatus::PartialFill,
-                quantity: left.quantity,
-                timestamp: 0,
-            });
-            orderbook.modify_quantity(right.orderid, right.quantity - left.quantity);
-        } else if left.quantity > right.quantity {
-            trades.push(Trade {
-                orderid: left.orderid,
-                side: left.side,
-                price: left.price,
-                status: OrderStatus::PartialFill,
-                quantity: left.quantity - right.quantity,
+                quantity: incoming_order.quantity,
                 timestamp: 0,
             });
 
-            trades.push(Trade {
-                orderid: right.orderid,
-                side: right.side,
-                price: right.price,
+            orderbook.modify_quantity(opposite_order.orderid, opposite_order.quantity - incoming_order.quantity);
+            // the state is full because the engine was able to fully match the incoming order
+            matches.update_state(MatchState::Full);
+
+        } else if incoming_order.quantity > opposite_order.quantity {
+            matches.add_match(Trade {
+                orderid: incoming_order.orderid,
+                side: incoming_order.side,
+                price: opposite_order.price,
+                status: OrderStatus::PartialFill,
+                quantity: opposite_order.quantity,
+                timestamp: 0,
+            });
+
+            matches.add_match(Trade {
+                orderid: opposite_order.orderid,
+                side: opposite_order.side,
+                price: opposite_order.price,
                 status: OrderStatus::Filled,
-                quantity: right.quantity,
+                quantity: opposite_order.quantity,
                 timestamp: 0,
             });
 
             // update the quantity of the partially filled order
-            left.quantity -= right.quantity;
+            incoming_order.quantity -= opposite_order.quantity;
 
-            // attempt to fill the rest of the partially filled order
-            let right = match left.side {
+            // we update the quantity left to match for the primary order
+            matches.update_qty_left(incoming_order.quantity);
+
+            // since the incoming order was partially filled, the state is updated accordingly
+            matches.update_state(MatchState::Partial);
+
+            let some_order = match incoming_order.side {
                 OrderSide::Bid => {
                     // pop off the current top ask, since it has already been filled
                     orderbook.pop_top_ask();
@@ -90,31 +191,34 @@ impl Matcher {
                     // get the current top bid and attempt to fill
                     orderbook.peek_top_bid()
                 }
+            };
+            
+            // attempt to fill the rest of the partially filled order
+            if let Some(opposite) = some_order {
+                Self::do_match(incoming_order, opposite.clone(), orderbook, matches)
             }
-            .unwrap()
-            .clone();
-            Self::do_match(left, right, orderbook, trades)
         } else {
-            // both orders can be fully filled
-            trades.push(Trade {
-                orderid: left.orderid,
-                side: left.side,
-                price: right.price,
+            matches.add_match(Trade {
+                orderid: incoming_order.orderid,
+                side: incoming_order.side,
+                price: opposite_order.price,
                 status: OrderStatus::Filled,
-                quantity: left.quantity,
+                quantity: incoming_order.quantity,
                 timestamp: 0,
             });
 
-            trades.push(Trade {
-                orderid: right.orderid,
-                side: right.side,
-                price: right.price,
+            matches.add_match(Trade {
+                orderid: opposite_order.orderid,
+                side: opposite_order.side,
+                price: opposite_order.price,
                 status: OrderStatus::Filled,
-                quantity: right.quantity,
+                quantity: opposite_order.quantity,
                 timestamp: 0,
             });
 
-            match left.side {
+            matches.update_state(MatchState::Full);
+
+            match incoming_order.side {
                 OrderSide::Bid => orderbook.pop_top_ask(),
                 OrderSide::Ask => orderbook.pop_top_bid(),
             };
@@ -143,9 +247,9 @@ mod test {
         });
 
         let matcher = Matcher {};
-        let order = create_order(11, OrderSide::Ask, dec!(2.22), OrderType::Limit, 100);
+        let order = create_order(11, OrderSide::Ask, dec!(2.22), OrderType::Market, 100);
         let matches = matcher.match_order(order, &mut orderbook);
-        assert!(matches.is_empty());
+        assert_eq!(matches.get_state(), MatchState::NoMatch);
     }
 
     #[test]
@@ -155,12 +259,7 @@ mod test {
             price_asset: Asset::USDC,
         });
 
-        let asks = vec![
-            create_order(12, OrderSide::Ask, dec!(100.00), OrderType::Limit, 100),
-            create_order(13, OrderSide::Ask, dec!(40.00), OrderType::Limit, 50),
-            create_order(15, OrderSide::Ask, dec!(550.00), OrderType::Limit, 50),
-        ];
-
+        let asks = create_orders(OrderSide::Ask);
         for ask in &asks {
             let _ = orderbook.place(ask.clone());
         }
@@ -168,36 +267,73 @@ mod test {
         let matcher = Matcher {};
         let bid = create_order(14, OrderSide::Bid, dec!(100.00), OrderType::Market, 100);
         let matches = matcher.match_order(bid, &mut orderbook);
-        assert!(!matches.is_empty());
-        assert_eq!(matches.len(), 4);
+
+        let trades = matches.get_matches();
+        assert!(!trades.is_empty());
+        assert_eq!(trades.len(), 4);
+        assert_eq!(matches.get_state(), MatchState::Full);
+        assert_eq!(matches.get_qty_left(), 0);
 
         dbg!(&matches);
 
-        let trade1 = &matches[0];
+        let trade1 = &trades[0];
         assert_eq!(trade1.orderid, bid.orderid);
         assert_eq!(trade1.quantity, 50);
-        assert_eq!(trade1.price, bid.price);
+        assert_eq!(trade1.price, dec!(40.00));
         assert_eq!(trade1.status, OrderStatus::PartialFill);
 
-        let trade2 = &matches[1];
+        let trade2 = &trades[1];
         let ask1 = &asks[1];
         assert_eq!(trade2.orderid, ask1.orderid);
         assert_eq!(trade2.quantity, ask1.quantity);
         assert_eq!(trade2.price, ask1.price);
         assert_eq!(trade2.status, OrderStatus::Filled);
 
-        let trade3 = &matches[2];
+        let trade3 = &trades[2];
         assert_eq!(trade3.orderid, bid.orderid);
         assert_eq!(trade3.quantity, bid.quantity - trade1.quantity);
         assert_eq!(trade3.price, bid.price);
         assert_eq!(trade3.status, OrderStatus::Filled);
 
-        let trade4 = &matches[3];
+        let trade4 = &trades[3];
         let ask2 = &asks[0];
         assert_eq!(trade4.orderid, ask2.orderid);
         assert_eq!(trade4.quantity, 50);
         assert_eq!(trade4.price, ask2.price);
         assert_eq!(trade4.status, OrderStatus::PartialFill);
+    }
+
+    #[test]
+    fn a_limit_order_is_partially_matched_if_price_limits_are_met_with_low_volume() {
+        let mut orderbook = LimitOrderBook::init(TradingPair {
+            order_asset: Asset::ETH,
+            price_asset: Asset::USDC,
+        });
+
+        let bids = create_orders(OrderSide::Bid);
+        for bid in &bids {
+            let _ = orderbook.place(bid.clone());
+        }
+
+        let matcher = Matcher {};
+        let order = create_order(11, OrderSide::Ask, dec!(5.00), OrderType::Limit, 1000);
+        let matches = matcher.match_order(order, &mut orderbook);
+        assert_eq!(matches.get_state(), MatchState::Partial);
+        assert_eq!(matches.get_qty_left(), 800);
+
+        let trades = matches.get_matches();
+        assert_eq!(trades.len(), 6);
+
+        assert_eq!(order.orderid, trades[0].orderid);
+        assert_eq!(trades[0].quantity, 50);
+        
+        assert!(orderbook.peek_top_bid().is_none());
+        let top_ask = orderbook.peek_top_ask();
+        assert!(top_ask.is_some());
+
+        let ask = top_ask.unwrap();
+        assert_eq!(ask.orderid, order.orderid);
+        assert_eq!(ask.quantity, matches.get_qty_left());
     }
 
     fn create_order(
@@ -219,5 +355,13 @@ mod test {
                 price_asset: Asset::USDC,
             },
         }
+    }
+
+    fn create_orders(side: OrderSide) -> Vec<Order> {
+        vec![
+            create_order(12, side, dec!(100.00), OrderType::Limit, 100),
+            create_order(13, side, dec!(40.00), OrderType::Limit, 50),
+            create_order(15, side, dec!(550.00), OrderType::Limit, 50),
+        ]
     }
 }

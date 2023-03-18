@@ -44,30 +44,31 @@ impl OrderQueue for PriceTimePriorityOrderQueue {
     }
 
     fn peek(&self) -> Option<&Order> {
-        if let Some(key) = self.heap.peek() {
-            return self.orders.get(&key.orderid);
+        match self.heap.peek() {
+            Some(key) => self.orders.get(&key.orderid),
+            None => None,
         }
-        None
     }
 
     fn pop(&mut self) -> Option<Order> {
-        if let Some(key) = self.heap.pop() {
-            return self.orders.remove(&key.orderid);
+        match self.heap.pop() {
+            Some(key) => self.orders.remove(&key.orderid),
+            None => None,
         }
-        None
     }
 
     fn remove(&mut self, orderid: OrderId) -> Option<Order> {
-        if let Some(order) = self.orders.remove(&orderid) {
-            // This creates a copy of the elements in the heap to satisfy the borrow checker.
-            // I'm new to rust so i'll keep this until i find a much better way. Need to figure out
-            // a way to not do this needless copy. And just modify using a reference to the existing data
-            let mut key_vec = self.heap.to_owned().into_vec();
-            key_vec.retain(|k| k.orderid != order.orderid);
-            self.heap = BinaryHeap::from(key_vec);
-            return Some(order);
+        match self.orders.remove(&orderid) {
+            Some(order) => {
+                // This seems to be the only way to effectively remove an item from the heap, by
+                // iterating orver all the items, excluding the item we want to remove and rebuilding
+                let mut key_vec = self.heap.to_owned().into_vec();
+                key_vec.retain(|k| k.orderid != order.orderid);
+                self.heap = key_vec.into();
+                Some(order)
+            }
+            None => None,
         }
-        None
     }
 
     fn find(&self, orderid: OrderId) -> Option<&Order> {

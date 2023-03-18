@@ -12,7 +12,7 @@ pub enum Asset {
     DOT,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Trade {
     pub orderid: OrderId,
     pub side: OrderSide,
@@ -35,7 +35,7 @@ pub enum OrderType {
     Stop,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum OrderStatus {
     Created,
     Filled,
