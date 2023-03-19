@@ -5,7 +5,7 @@ use super::{
 };
 use rust_decimal::Decimal;
 
-const ORDER_BOOK_INITIAL_CAPACITY: usize = 512;
+const ORDER_BOOK_INITIAL_CAPACITY: usize = 16;
 
 pub trait OrderBook {
     fn cancel(&mut self, orderid: OrderId) -> Result<Event, Failure>;

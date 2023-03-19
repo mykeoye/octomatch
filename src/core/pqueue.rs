@@ -86,7 +86,7 @@ impl OrderQueue for PriceTimePriorityOrderQueue {
 mod test {
     use crate::core::{
         model::TradingPair,
-        types::{Asset, OrderSide, OrderType},
+        types::{Asset, OrderSide, OrderType, TimestampMillis},
     };
     use rust_decimal::Decimal;
     use rust_decimal_macros::dec;
@@ -222,7 +222,7 @@ mod test {
         quantity: Long,
         order_type: OrderType,
         trading_pair: TradingPair,
-        timestamp: Long,
+        timestamp: TimestampMillis,
     ) -> Order {
         Order {
             orderid,

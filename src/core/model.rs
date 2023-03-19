@@ -1,7 +1,7 @@
 use rust_decimal::Decimal;
 use std::{cmp::Ordering, fmt::Debug};
 
-use super::types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType};
+use super::types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType, TimestampMillis};
 
 #[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub struct Order {
@@ -10,7 +10,7 @@ pub struct Order {
     pub quantity: Long,
     pub side: OrderSide,
     pub order_type: OrderType,
-    pub timestamp: Long,
+    pub timestamp: TimestampMillis,
     pub trading_pair: TradingPair,
 }
 
@@ -53,7 +53,7 @@ pub struct OrderKey {
     pub orderid: OrderId,
     pub price: Decimal,
     pub side: OrderSide,
-    pub timestamp: Long,
+    pub timestamp: TimestampMillis,
 }
 
 // The ordering determines how the orders are arranged in the queue. For price time priority

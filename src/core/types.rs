@@ -2,6 +2,7 @@ use rust_decimal::Decimal;
 
 pub type OrderId = u64;
 pub type Long = u64;
+pub type TimestampMillis = u128;
 
 #[derive(Eq, PartialEq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub enum Asset {
