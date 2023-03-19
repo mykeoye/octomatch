@@ -276,8 +276,6 @@ mod test {
         assert_eq!(matches.get_state(), MatchState::Full);
         assert_eq!(matches.get_qty_left(), 0);
 
-        dbg!(&matches);
-
         let trade1 = &trades[0];
         assert_eq!(trade1.orderid, bid.orderid);
         assert_eq!(trade1.quantity, 50);
