@@ -89,7 +89,7 @@ mod test {
         types::{Asset, OrderSide, OrderType},
     };
     use rust_decimal::Decimal;
-    use std::str::FromStr;
+    use rust_decimal_macros::dec;
 
     use super::*;
 
@@ -98,30 +98,30 @@ mod test {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
         let orders = vec![
-            Order {
-                orderid: 8,
-                price: Decimal::from_str("200.02").unwrap(),
-                side: OrderSide::Bid,
-                quantity: 4,
-                order_type: OrderType::Limit,
-                timestamp: 1678170180000,
-                trading_pair: TradingPair {
+            create_order(
+                8,
+                dec!(200.02),
+                OrderSide::Bid,
+                4,
+                OrderType::Limit,
+                TradingPair {
                     order_asset: Asset::BTC,
                     price_asset: Asset::USDC,
                 },
-            },
-            Order {
-                orderid: 9,
-                price: Decimal::from_str("300.02").unwrap(),
-                side: OrderSide::Bid,
-                quantity: 10,
-                order_type: OrderType::Limit,
-                timestamp: 1680848580000,
-                trading_pair: TradingPair {
+                1678170180000,
+            ),
+            create_order(
+                9,
+                dec!(300.02),
+                OrderSide::Bid,
+                10,
+                OrderType::Limit,
+                TradingPair {
                     order_asset: Asset::DOT,
                     price_asset: Asset::USDT,
                 },
-            },
+                1680848580000,
+            ),
         ];
 
         orders.iter().for_each(|key| pq.push(*key));
@@ -138,30 +138,30 @@ mod test {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
         let orders = vec![
-            Order {
-                orderid: 8,
-                price: Decimal::from_str("200.02").unwrap(),
-                side: OrderSide::Bid,
-                quantity: 8,
-                order_type: OrderType::Limit,
-                timestamp: 1678170180000,
-                trading_pair: TradingPair {
-                    order_asset: Asset::DOT,
-                    price_asset: Asset::USDT,
+            create_order(
+                8,
+                dec!(200.02),
+                OrderSide::Bid,
+                4,
+                OrderType::Limit,
+                TradingPair {
+                    order_asset: Asset::BTC,
+                    price_asset: Asset::USDC,
                 },
-            },
-            Order {
-                orderid: 9,
-                price: Decimal::from_str("200.02").unwrap(),
-                side: OrderSide::Bid,
-                quantity: 12,
-                order_type: OrderType::Limit,
-                timestamp: 1680848580000,
-                trading_pair: TradingPair {
+                1678170180000,
+            ),
+            create_order(
+                9,
+                dec!(200.02),
+                OrderSide::Bid,
+                12,
+                OrderType::Limit,
+                TradingPair {
                     order_asset: Asset::ETH,
                     price_asset: Asset::USDT,
                 },
-            },
+                1680848580000,
+            ),
         ];
 
         orders.iter().for_each(|key| pq.push(*key));
@@ -174,18 +174,18 @@ mod test {
     fn orders_can_be_removed_from_queue_if_they_are_canceled() {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
-        let order = Order {
-            orderid: 8,
-            price: Decimal::from_str("200.02").unwrap(),
-            side: OrderSide::Bid,
-            quantity: 8,
-            order_type: OrderType::Limit,
-            timestamp: 1678170180000,
-            trading_pair: TradingPair {
+        let order = create_order(
+            8,
+            dec!(200.02),
+            OrderSide::Bid,
+            8,
+            OrderType::Limit,
+            TradingPair {
                 order_asset: Asset::DOT,
                 price_asset: Asset::USDT,
             },
-        };
+            1678170180000,
+        );
 
         pq.push(order);
         assert_eq!(order, *pq.peek().unwrap());
@@ -198,20 +198,40 @@ mod test {
     fn orders_can_be_poped_from_queue_when_needed() {
         let mut pq = PriceTimePriorityOrderQueue::new();
 
-        let order = Order {
-            orderid: 8,
-            price: Decimal::from_str("200.02").unwrap(),
-            side: OrderSide::Bid,
-            quantity: 8,
-            order_type: OrderType::Limit,
-            timestamp: 1678170180000,
-            trading_pair: TradingPair {
+        let order = create_order(
+            8,
+            dec!(200.02),
+            OrderSide::Bid,
+            8,
+            OrderType::Limit,
+            TradingPair {
                 order_asset: Asset::ETH,
                 price_asset: Asset::USDC,
             },
-        };
+            1678170180000,
+        );
 
         pq.push(order);
         assert_eq!(order, pq.pop().unwrap());
+    }
+
+    fn create_order(
+        orderid: OrderId,
+        price: Decimal,
+        side: OrderSide,
+        quantity: Long,
+        order_type: OrderType,
+        trading_pair: TradingPair,
+        timestamp: Long,
+    ) -> Order {
+        Order {
+            orderid,
+            price,
+            side,
+            quantity,
+            order_type,
+            timestamp,
+            trading_pair,
+        }
     }
 }

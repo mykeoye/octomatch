@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use super::{
     model::Order,
-    orderbook::{LimitOrderBook, OrderBook},
+    orderbook::OrderBook,
     types::{Long, OrderSide, OrderStatus, OrderType, Trade},
 };
 
@@ -146,10 +146,12 @@ impl Matcher {
                 timestamp: 0,
             });
 
-            orderbook.modify_quantity(opposite_order.orderid, opposite_order.quantity - incoming_order.quantity);
+            orderbook.modify_quantity(
+                opposite_order.orderid,
+                opposite_order.quantity - incoming_order.quantity,
+            );
             // the state is full because the engine was able to fully match the incoming order
             matches.update_state(MatchState::Full);
-
         } else if incoming_order.quantity > opposite_order.quantity {
             matches.add_match(Trade {
                 orderid: incoming_order.orderid,
@@ -192,7 +194,7 @@ impl Matcher {
                     orderbook.peek_top_bid()
                 }
             };
-            
+
             // attempt to fill the rest of the partially filled order
             if let Some(opposite) = some_order {
                 Self::do_match(incoming_order, opposite.clone(), orderbook, matches)
@@ -274,8 +276,6 @@ mod test {
         assert_eq!(matches.get_state(), MatchState::Full);
         assert_eq!(matches.get_qty_left(), 0);
 
-        dbg!(&matches);
-
         let trade1 = &trades[0];
         assert_eq!(trade1.orderid, bid.orderid);
         assert_eq!(trade1.quantity, 50);
@@ -326,7 +326,7 @@ mod test {
 
         assert_eq!(order.orderid, trades[0].orderid);
         assert_eq!(trades[0].quantity, 50);
-        
+
         assert!(orderbook.peek_top_bid().is_none());
         let top_ask = orderbook.peek_top_ask();
         assert!(top_ask.is_some());
