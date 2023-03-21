@@ -1,7 +1,10 @@
 use rust_decimal::Decimal;
 use std::{cmp::Ordering, fmt::Debug};
 
-use super::types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType, TimestampMillis};
+use super::{
+    pqueue::Keyable,
+    types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType, TimestampMillis},
+};
 
 #[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub struct Order {
@@ -25,7 +28,7 @@ impl Order {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Hash, Clone, Debug)]
 pub struct TradingPair {
     pub order_asset: Asset,
     pub price_asset: Asset,
@@ -55,6 +58,8 @@ pub struct OrderKey {
     pub side: OrderSide,
     pub timestamp: TimestampMillis,
 }
+
+impl Keyable for OrderKey {}
 
 // The ordering determines how the orders are arranged in the queue. For price time priority
 // ordering, we want orders inserted based on the price and the time of entry. For Bids this

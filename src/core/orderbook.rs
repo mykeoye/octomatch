@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use super::{
-    model::{Event, Order, TradingPair},
+    model::{Event, Order, OrderKey, TradingPair},
     pqueue::{OrderQueue, PriceTimePriorityOrderQueue},
     types::{Failure, Long, OrderId, OrderSide, OrderStatus, OrderType},
 };
@@ -20,8 +22,9 @@ pub trait OrderBook {
 
 pub struct LimitOrderBook {
     trading_pair: TradingPair,
-    bids: PriceTimePriorityOrderQueue,
-    asks: PriceTimePriorityOrderQueue,
+    bids: PriceTimePriorityOrderQueue<OrderKey>,
+    asks: PriceTimePriorityOrderQueue<OrderKey>,
+    orders: HashMap<OrderId, Order>,
 }
 
 impl LimitOrderBook {
@@ -30,31 +33,27 @@ impl LimitOrderBook {
             trading_pair,
             bids: PriceTimePriorityOrderQueue::with_capacity(ORDER_BOOK_INITIAL_CAPACITY),
             asks: PriceTimePriorityOrderQueue::with_capacity(ORDER_BOOK_INITIAL_CAPACITY),
+            orders: HashMap::with_capacity(ORDER_BOOK_INITIAL_CAPACITY),
         }
     }
 }
 
 impl OrderBook for LimitOrderBook {
     fn cancel(&mut self, orderid: OrderId) -> Result<Event, Failure> {
-        // check the bid queues to see if we can find the order
-        if let Some(order) = self.bids.find(orderid) {
-            self.bids.remove(order.orderid);
-            return Ok(Event {
-                orderid,
-                status: OrderStatus::Canceled,
-                at_price: String::from(""),
-            });
+        match self.orders.remove(&orderid) {
+            Some(order) => {
+                match order.side {
+                    OrderSide::Bid => self.bids.remove(order.to_key()),
+                    OrderSide::Ask => self.asks.remove(order.to_key()),
+                };
+                return Ok(Event {
+                    orderid,
+                    status: OrderStatus::Canceled,
+                    at_price: String::from(""),
+                });
+            }
+            None => Err(Failure::OrderNotFound("No order found with the given id")),
         }
-        // else we check the ask queues to see if we can find it there
-        if let Some(order) = self.asks.find(orderid) {
-            self.asks.remove(order.orderid);
-            return Ok(Event {
-                orderid,
-                status: OrderStatus::Canceled,
-                at_price: String::from(""),
-            });
-        }
-        Err(Failure::OrderNotFound("No order found with the given id"))
     }
 
     fn place(&mut self, order: Order) -> Result<Event, Failure> {
@@ -64,8 +63,8 @@ impl OrderBook for LimitOrderBook {
             ));
         }
         match order.side {
-            OrderSide::Bid => self.bids.push(order),
-            OrderSide::Ask => self.asks.push(order),
+            OrderSide::Bid => self.bids.push(order.to_key()),
+            OrderSide::Ask => self.asks.push(order.to_key()),
         };
         Ok(Event {
             status: OrderStatus::Created,
@@ -85,28 +84,37 @@ impl OrderBook for LimitOrderBook {
     }
 
     fn peek_top_ask(&self) -> Option<&Order> {
-        self.asks.peek()
+        if let Some(key) = self.asks.peek() {
+            return self.orders.get(&key.orderid);
+        }
+        None
     }
 
     fn peek_top_bid(&self) -> Option<&Order> {
-        self.bids.peek()
+        if let Some(key) = self.bids.peek() {
+            return self.orders.get(&key.orderid);
+        }
+        None
     }
 
     fn modify_quantity(&mut self, orderid: OrderId, quantity: Long) {
-        if let Some(order) = self.bids.find(orderid) {
-            self.bids.modify_quantity(order.orderid, quantity)
-        }
-        if let Some(order) = self.asks.find(orderid) {
-            self.asks.modify_quantity(order.orderid, quantity)
+        if let Some(order) = self.orders.get_mut(&orderid) {
+            order.quantity = quantity
         }
     }
 
     fn pop_top_bid(&mut self) -> Option<Order> {
-        self.bids.pop()
+        if let Some(key) = self.bids.pop() {
+            return self.orders.remove(&key.orderid);
+        }
+        None
     }
 
     fn pop_top_ask(&mut self) -> Option<Order> {
-        self.asks.pop()
+        if let Some(key) = self.asks.pop() {
+            return self.orders.remove(&key.orderid);
+        }
+        None
     }
 }
 
@@ -115,10 +123,13 @@ mod test {
     use std::str::FromStr;
 
     use rust_decimal::Decimal;
+    use rust_decimal_macros::dec;
+    use uuid::Uuid;
 
     use crate::core::{
         model::{Order, TradingPair},
-        types::{Asset, Failure, OrderSide, OrderStatus, OrderType},
+        types::{Asset, Failure, Long, OrderSide, OrderStatus, OrderType, TimestampMillis},
+        utils::Util,
     };
 
     use super::{LimitOrderBook, OrderBook};
@@ -130,18 +141,16 @@ mod test {
             price_asset: Asset::ETH,
         });
 
-        let result = orderbook.place(Order {
-            orderid: 8,
-            price: Decimal::from_str("200.02").unwrap(),
-            side: OrderSide::Bid,
-            quantity: 8,
-            order_type: OrderType::Limit,
-            timestamp: 1678170180000,
-            trading_pair: TradingPair {
+        let result = orderbook.place(create_order(
+            dec!(200.02),
+            OrderSide::Bid,
+            8,
+            OrderType::Limit,
+            TradingPair {
                 order_asset: Asset::ETH,
                 price_asset: Asset::USDC,
             },
-        });
+        ));
 
         let event = result.unwrap();
         assert_eq!(OrderStatus::Created, event.status);
@@ -154,18 +163,16 @@ mod test {
             price_asset: Asset::USDT,
         });
 
-        let result = orderbook.place(Order {
-            orderid: 8,
-            price: Decimal::from_str("200.02").unwrap(),
-            side: OrderSide::Bid,
-            quantity: 8,
-            order_type: OrderType::Market,
-            timestamp: 1678170180000,
-            trading_pair: TradingPair {
+        let result = orderbook.place(create_order(
+            dec!(200.02),
+            OrderSide::Bid,
+            8,
+            OrderType::Limit,
+            TradingPair {
                 order_asset: Asset::ETH,
                 price_asset: Asset::USDC,
             },
-        });
+        ));
 
         let failure = result.unwrap_err();
         assert_eq!(
@@ -181,18 +188,16 @@ mod test {
             price_asset: Asset::USDT,
         });
 
-        let result = orderbook.place(Order {
-            orderid: 8,
-            price: Decimal::from_str("200.02").unwrap(),
-            side: OrderSide::Bid,
-            quantity: 8,
-            order_type: OrderType::Limit,
-            timestamp: 1678170180000,
-            trading_pair: TradingPair {
+        let result = orderbook.place(create_order(
+            dec!(200.02),
+            OrderSide::Bid,
+            8,
+            OrderType::Limit,
+            TradingPair {
                 order_asset: Asset::ETH,
                 price_asset: Asset::USDC,
             },
-        });
+        ));
 
         let event = result.unwrap();
         let result = orderbook.cancel(event.orderid);
@@ -219,18 +224,16 @@ mod test {
             price_asset: Asset::USDT,
         });
 
-        let result = orderbook.place(Order {
-            orderid: 8,
-            price: Decimal::from_str("200.02").unwrap(),
-            side: OrderSide::Bid,
-            quantity: 8,
-            order_type: OrderType::Limit,
-            timestamp: 1678170180000,
-            trading_pair: TradingPair {
+        let result = orderbook.place(create_order(
+            dec!(200.02),
+            OrderSide::Bid,
+            8,
+            OrderType::Limit,
+            TradingPair {
                 order_asset: Asset::ETH,
                 price_asset: Asset::USDC,
             },
-        });
+        ));
 
         let _event = result.unwrap();
 
@@ -246,30 +249,26 @@ mod test {
         });
 
         let orders = vec![
-            Order {
-                orderid: 8,
-                price: Decimal::from_str("200.02").unwrap(),
-                side: OrderSide::Ask,
-                quantity: 8,
-                order_type: OrderType::Limit,
-                timestamp: 1678170180000,
-                trading_pair: TradingPair {
+            create_order(
+                dec!(200.02),
+                OrderSide::Ask,
+                8,
+                OrderType::Limit,
+                TradingPair {
                     order_asset: Asset::ETH,
                     price_asset: Asset::USDC,
                 },
-            },
-            Order {
-                orderid: 18,
-                price: Decimal::from_str("100.02").unwrap(),
-                side: OrderSide::Bid,
-                quantity: 8,
-                order_type: OrderType::Limit,
-                timestamp: 1678170180000,
-                trading_pair: TradingPair {
+            ),
+            create_order(
+                dec!(100.02),
+                OrderSide::Bid,
+                8,
+                OrderType::Limit,
+                TradingPair {
                     order_asset: Asset::ETH,
                     price_asset: Asset::USDC,
                 },
-            },
+            ),
         ];
 
         for order in orders.iter() {
@@ -278,5 +277,23 @@ mod test {
 
         let spread = orderbook.get_spread().unwrap();
         assert_eq!(spread, Decimal::from_str("-100.00").unwrap());
+    }
+
+    fn create_order(
+        price: Decimal,
+        side: OrderSide,
+        quantity: Long,
+        order_type: OrderType,
+        trading_pair: TradingPair,
+    ) -> Order {
+        Order {
+            orderid: Uuid::new_v4(),
+            price,
+            side,
+            quantity,
+            order_type,
+            timestamp: Util::current_time_millis(),
+            trading_pair,
+        }
     }
 }

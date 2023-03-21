@@ -1,105 +1,79 @@
-use super::model::{Order, OrderKey};
-use super::types::{Long, OrderId};
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::BinaryHeap;
+
+pub trait Keyable: Clone + Ord + PartialEq + Copy {}
 
 /// Defines the operations to be performed by an order queue. The implementation of this
 /// is a priority queue that orders items based on some defined prioritization strategy
 /// this is left entirely to the implementation of this trait
-pub trait OrderQueue {
-    fn push(&mut self, order: Order);
-    fn peek(&self) -> Option<&Order>;
-    fn pop(&mut self) -> Option<Order>;
-    fn remove(&mut self, orderid: OrderId) -> Option<Order>;
-    fn find(&self, orderid: OrderId) -> Option<&Order>;
-    fn modify_quantity(&mut self, orderid: OrderId, quantity: Long);
+pub trait OrderQueue<Key> {
+    fn push(&mut self, key: Key);
+    fn peek(&self) -> Option<&Key>;
+    fn pop(&mut self) -> Option<Key>;
+    fn remove(&mut self, key: Key) -> Option<Key>;
 }
 
-pub struct PriceTimePriorityOrderQueue {
-    heap: BinaryHeap<OrderKey>,
-    orders: HashMap<OrderId, Order>,
+pub struct PriceTimePriorityOrderQueue<T> {
+    heap: BinaryHeap<T>,
 }
 
-impl PriceTimePriorityOrderQueue {
+impl<T> PriceTimePriorityOrderQueue<T>
+where
+    T: Keyable,
+{
     pub fn new() -> Self {
         Self {
             heap: BinaryHeap::with_capacity(16),
-            orders: HashMap::with_capacity(16),
         }
     }
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             heap: BinaryHeap::with_capacity(capacity),
-            orders: HashMap::with_capacity(capacity),
         }
     }
 }
 
-impl OrderQueue for PriceTimePriorityOrderQueue {
-    fn push(&mut self, order: Order) {
-        if self.orders.contains_key(&order.orderid) {
-            return;
-        }
-        self.heap.push(order.to_key());
-        self.orders.insert(order.orderid, order);
+impl<T> OrderQueue<T> for PriceTimePriorityOrderQueue<T>
+where
+    T: Keyable,
+{
+    fn push(&mut self, key: T) {
+        self.heap.push(key)
     }
 
-    fn peek(&self) -> Option<&Order> {
-        match self.heap.peek() {
-            Some(key) => self.orders.get(&key.orderid),
-            None => None,
-        }
+    fn peek(&self) -> Option<&T> {
+        self.heap.peek()
     }
 
-    fn pop(&mut self) -> Option<Order> {
-        match self.heap.pop() {
-            Some(key) => self.orders.remove(&key.orderid),
-            None => None,
-        }
+    fn pop(&mut self) -> Option<T> {
+        self.heap.pop()
     }
 
-    fn remove(&mut self, orderid: OrderId) -> Option<Order> {
-        match self.orders.remove(&orderid) {
-            Some(order) => {
-                // This seems to be the only way to effectively remove an item from the heap, by
-                // iterating orver all the items, excluding the item we want to remove and rebuilding
-                let mut key_vec = self.heap.to_owned().into_vec();
-                key_vec.retain(|k| k.orderid != order.orderid);
-                self.heap = key_vec.into();
-                Some(order)
-            }
-            None => None,
-        }
-    }
-
-    fn find(&self, orderid: OrderId) -> Option<&Order> {
-        self.orders.get(&orderid)
-    }
-
-    fn modify_quantity(&mut self, orderid: OrderId, quantity: Long) {
-        if let Some(order) = self.orders.get_mut(&orderid) {
-            order.quantity = quantity;
-        }
+    fn remove(&mut self, key: T) -> Option<T> {
+        let mut key_vec = self.heap.to_owned().into_vec();
+        key_vec.retain(|k| *k != key);
+        self.heap = key_vec.into();
+        Some(key)
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::core::{
-        model::TradingPair,
-        types::{Asset, OrderSide, OrderType, TimestampMillis},
+        model::{Order, OrderKey, TradingPair},
+        types::{Asset, Long, OrderSide, OrderType, TimestampMillis},
     };
     use rust_decimal::Decimal;
     use rust_decimal_macros::dec;
+    use uuid::Uuid;
 
     use super::*;
 
     #[test]
     fn can_get_an_inserted_order_back_from_queue() {
-        let mut pq = PriceTimePriorityOrderQueue::new();
+        let mut pq: PriceTimePriorityOrderQueue<OrderKey> = PriceTimePriorityOrderQueue::new();
 
         let orders = vec![
             create_order(
-                8,
                 dec!(200.02),
                 OrderSide::Bid,
                 4,
@@ -111,7 +85,6 @@ mod test {
                 1678170180000,
             ),
             create_order(
-                9,
                 dec!(300.02),
                 OrderSide::Bid,
                 10,
@@ -124,22 +97,22 @@ mod test {
             ),
         ];
 
-        orders.iter().for_each(|key| pq.push(*key));
+        orders.iter().for_each(|order| pq.push(order.to_key()));
 
-        let head: Order = *pq.peek().unwrap();
+        let head: OrderKey = *pq.peek().unwrap();
         assert_eq!(
-            orders[1], head,
+            orders[1].to_key(),
+            head,
             "Asserting that the item at the head of the queue is the order with the highest price"
         );
     }
 
     #[test]
     fn orders_at_the_same_price_are_prioritized_by_time() {
-        let mut pq = PriceTimePriorityOrderQueue::new();
+        let mut pq: PriceTimePriorityOrderQueue<OrderKey> = PriceTimePriorityOrderQueue::new();
 
         let orders = vec![
             create_order(
-                8,
                 dec!(200.02),
                 OrderSide::Bid,
                 4,
@@ -151,7 +124,6 @@ mod test {
                 1678170180000,
             ),
             create_order(
-                9,
                 dec!(200.02),
                 OrderSide::Bid,
                 12,
@@ -164,18 +136,17 @@ mod test {
             ),
         ];
 
-        orders.iter().for_each(|key| pq.push(*key));
+        orders.iter().for_each(|order| pq.push(order.to_key()));
 
-        let head: Order = *pq.peek().unwrap();
-        assert_eq!(orders[0], head, "For orders with the same price, the longest staying order should be at the head of the queue");
+        let head: OrderKey = *pq.peek().unwrap();
+        assert_eq!(orders[0].to_key(), head, "For orders with the same price, the longest staying order should be at the head of the queue");
     }
 
     #[test]
     fn orders_can_be_removed_from_queue_if_they_are_canceled() {
-        let mut pq = PriceTimePriorityOrderQueue::new();
+        let mut pq: PriceTimePriorityOrderQueue<OrderKey> = PriceTimePriorityOrderQueue::new();
 
         let order = create_order(
-            8,
             dec!(200.02),
             OrderSide::Bid,
             8,
@@ -187,19 +158,18 @@ mod test {
             1678170180000,
         );
 
-        pq.push(order);
-        assert_eq!(order, *pq.peek().unwrap());
+        pq.push(order.to_key());
+        assert_eq!(order.to_key(), *pq.peek().unwrap());
 
-        pq.remove(order.orderid);
+        pq.remove(order.to_key());
         assert_eq!(None, pq.peek());
     }
 
     #[test]
     fn orders_can_be_poped_from_queue_when_needed() {
-        let mut pq = PriceTimePriorityOrderQueue::new();
+        let mut pq: PriceTimePriorityOrderQueue<OrderKey> = PriceTimePriorityOrderQueue::new();
 
         let order = create_order(
-            8,
             dec!(200.02),
             OrderSide::Bid,
             8,
@@ -211,12 +181,11 @@ mod test {
             1678170180000,
         );
 
-        pq.push(order);
-        assert_eq!(order, pq.pop().unwrap());
+        pq.push(order.to_key());
+        assert_eq!(order.to_key(), pq.pop().unwrap());
     }
 
     fn create_order(
-        orderid: OrderId,
         price: Decimal,
         side: OrderSide,
         quantity: Long,
@@ -225,7 +194,7 @@ mod test {
         timestamp: TimestampMillis,
     ) -> Order {
         Order {
-            orderid,
+            orderid: Uuid::new_v4(),
             price,
             side,
             quantity,
