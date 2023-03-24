@@ -67,10 +67,10 @@ pub enum MatchState {
     NoMatch,
 }
 
-pub struct Matcher {}
+pub struct Matcher;
 
 impl Matcher {
-    pub fn match_order(&self, order: Order, orderbook: &mut dyn OrderBook) -> Match<Trade> {
+    pub fn match_order<T: OrderBook>(&self, order: Order, orderbook: &mut T) -> Match<Trade> {
         let mut matches = Match::new();
         match order.order_type {
             // a market order is matched immediately at the best available price. In cases
@@ -245,10 +245,7 @@ mod test {
 
     #[test]
     fn an_empty_orderbook_should_have_no_executed_trades() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::ETH,
-            price_asset: Asset::USDC,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let matcher = Matcher {};
         let order = create_order(OrderSide::Ask, dec!(2.22), OrderType::Market, 100);
@@ -258,10 +255,7 @@ mod test {
 
     #[test]
     fn a_market_bid_is_fully_matched_in_a_non_empty_orderbook_with_matching_asks() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::ETH,
-            price_asset: Asset::USDC,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let asks = create_orders(OrderSide::Ask);
         for ask in &asks {
@@ -307,10 +301,7 @@ mod test {
 
     #[test]
     fn a_limit_order_is_partially_matched_if_price_limits_are_met_with_low_volume() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::ETH,
-            price_asset: Asset::USDC,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let bids = create_orders(OrderSide::Bid);
         for bid in &bids {
@@ -351,10 +342,7 @@ mod test {
             quantity,
             order_type,
             timestamp: Util::current_time_millis(),
-            trading_pair: TradingPair {
-                order_asset: Asset::ETH,
-                price_asset: Asset::USDC,
-            },
+            trading_pair: TradingPair::from(Asset::ETH, Asset::USDC),
         }
     }
 

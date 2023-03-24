@@ -52,16 +52,22 @@ impl OrderBook for LimitOrderBook {
                     at_price: String::from(""),
                 });
             }
-            None => Err(Failure::OrderNotFound("No order found with the given id")),
+            None => Err(Failure::OrderNotFound(
+                "No order found with the given id".to_string(),
+            )),
         }
     }
 
     fn place(&mut self, order: Order) -> Result<Event, Failure> {
         if OrderType::Market == order.order_type {
             return Err(Failure::OrderRejected(
-                "Only limit orders can be placed in the orderbook",
+                "Only limit orders can be placed in the orderbook".to_string(),
             ));
         }
+        if self.trading_pair != order.trading_pair {
+            return Err(Failure::InvalidOrderForBook);
+        }
+        self.orders.insert(order.orderid, order);
         match order.side {
             OrderSide::Bid => self.bids.push(order.to_key()),
             OrderSide::Ask => self.asks.push(order.to_key()),
@@ -128,7 +134,7 @@ mod test {
 
     use crate::core::{
         model::{Order, TradingPair},
-        types::{Asset, Failure, Long, OrderSide, OrderStatus, OrderType, TimestampMillis},
+        types::{Asset, Failure, Long, OrderSide, OrderStatus, OrderType},
         utils::Util,
     };
 
@@ -136,67 +142,60 @@ mod test {
 
     #[test]
     fn can_place_a_limit_order_in_the_order_book() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::BTC,
-            price_asset: Asset::ETH,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::BTC, Asset::ETH));
 
-        let result = orderbook.place(create_order(
+        let order = create_order(
             dec!(200.02),
             OrderSide::Bid,
             8,
             OrderType::Limit,
             TradingPair {
-                order_asset: Asset::ETH,
-                price_asset: Asset::USDC,
+                order_asset: Asset::BTC,
+                price_asset: Asset::ETH,
             },
-        ));
+        );
+        let result = orderbook.place(order);
 
         let event = result.unwrap();
         assert_eq!(OrderStatus::Created, event.status);
+
+        // we expect the order we placed to be at the top of the book
+        let order_placed = orderbook.peek_top_bid();
+        assert_eq!(*order_placed.unwrap(), order);
     }
 
     #[test]
     fn market_orders_cannot_be_inserted_into_the_orderbook() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::BTC,
-            price_asset: Asset::USDT,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::BTC, Asset::USDT));
 
         let result = orderbook.place(create_order(
             dec!(200.02),
             OrderSide::Bid,
             8,
-            OrderType::Limit,
+            OrderType::Market,
             TradingPair {
-                order_asset: Asset::ETH,
-                price_asset: Asset::USDC,
+                order_asset: Asset::BTC,
+                price_asset: Asset::USDT,
             },
         ));
 
         let failure = result.unwrap_err();
         assert_eq!(
-            Failure::OrderRejected("Only limit orders can be placed in the orderbook"),
+            Failure::OrderRejected("Only limit orders can be placed in the orderbook".to_string()),
             failure
         );
     }
 
     #[test]
     fn canceling_a_limit_order_is_should_be_allowed() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::BTC,
-            price_asset: Asset::USDT,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::BTC, Asset::USDT));
 
         let result = orderbook.place(create_order(
             dec!(200.02),
             OrderSide::Bid,
             8,
             OrderType::Limit,
-            TradingPair {
-                order_asset: Asset::ETH,
-                price_asset: Asset::USDC,
-            },
+            TradingPair::from(Asset::BTC, Asset::USDT),
         ));
 
         let event = result.unwrap();
@@ -208,10 +207,7 @@ mod test {
 
     #[test]
     fn an_empty_orderbook_should_have_no_spread() {
-        let orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::BTC,
-            price_asset: Asset::USDT,
-        });
+        let orderbook = LimitOrderBook::init(TradingPair::from(Asset::BTC, Asset::USDT));
 
         let spread = orderbook.get_spread();
         assert_eq!(spread, None)
@@ -219,20 +215,14 @@ mod test {
 
     #[test]
     fn an_orderbook_with_a_single_bid_or_ask_has_no_spread() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::BTC,
-            price_asset: Asset::USDT,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let result = orderbook.place(create_order(
             dec!(200.02),
             OrderSide::Bid,
             8,
             OrderType::Limit,
-            TradingPair {
-                order_asset: Asset::ETH,
-                price_asset: Asset::USDC,
-            },
+            TradingPair::from(Asset::ETH, Asset::USDC),
         ));
 
         let _event = result.unwrap();
@@ -243,10 +233,7 @@ mod test {
 
     #[test]
     fn the_spread_can_be_gotten_for_a_book_with_both_sides() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::BTC,
-            price_asset: Asset::USDT,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let orders = vec![
             create_order(
@@ -254,20 +241,14 @@ mod test {
                 OrderSide::Ask,
                 8,
                 OrderType::Limit,
-                TradingPair {
-                    order_asset: Asset::ETH,
-                    price_asset: Asset::USDC,
-                },
+                TradingPair::from(Asset::ETH, Asset::USDC),
             ),
             create_order(
                 dec!(100.02),
                 OrderSide::Bid,
                 8,
                 OrderType::Limit,
-                TradingPair {
-                    order_asset: Asset::ETH,
-                    price_asset: Asset::USDC,
-                },
+                TradingPair::from(Asset::ETH, Asset::USDC),
             ),
         ];
 

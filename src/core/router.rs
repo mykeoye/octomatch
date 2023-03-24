@@ -7,7 +7,7 @@ use super::{
     matcher::Matcher,
     model::{Order, TradingPair},
     orderbook::OrderBook,
-    types::{Long, OrderId, OrderSide, OrderType},
+    types::{Failure, Long, OrderId, OrderSide, OrderType},
     utils::Util,
 };
 
@@ -15,6 +15,22 @@ use super::{
 pub enum Request {
     PlaceOrder(PlaceOrder),
     Cancel(CancelOrder),
+}
+
+impl Request {
+    fn validate(&self) -> Option<Failure> {
+        match self {
+            Request::PlaceOrder(p) => {
+                if p.quantity <= 0 {
+                    return Some(Failure::OrderRejected(
+                        "Quantity must be greater than zero".to_string(),
+                    ));
+                }
+                p.trading_pair.validate()
+            }
+            Request::Cancel(c) => c.trading_pair.validate(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -46,8 +62,10 @@ pub struct CancelOrder {
     pub trading_pair: TradingPair,
 }
 
+/// The router interface is responsible for handling different request types
+/// and routing an order to the appropriate order book, for matching
 pub trait Router {
-    fn route(&mut self, request: Request);
+    fn handle(&mut self, request: Request) -> Result<(), Failure>;
 }
 
 pub struct OrderRouter<T> {
@@ -59,7 +77,13 @@ impl<T> OrderRouter<T> {
     pub fn new() -> Self {
         Self {
             books: HashMap::with_capacity(16),
-            matcher: Matcher {},
+            matcher: Matcher,
+        }
+    }
+    pub fn with_books(books: HashMap<TradingPair, T>) -> Self {
+        Self {
+            books,
+            matcher: Matcher,
         }
     }
 }
@@ -68,22 +92,39 @@ impl<T> Router for OrderRouter<T>
 where
     T: OrderBook,
 {
-    fn route(&mut self, request: Request) {
-        // we should run prevalidations before the request gets here then we find the book that
-        // matches the trading pair and then pass it to the matcher along with the order
-        match request {
-            Request::PlaceOrder(p) => {
-                let order = p.to_order();
-                match self.books.get_mut(&order.trading_pair) {
-                    Some(book) => self.matcher.match_order(order, book),
-                    None => todo!(),
-                };
-            }
-            Request::Cancel(r) => {
-                let _ = match self.books.get_mut(&r.trading_pair) {
-                    Some(book) => book.cancel(r.orderid),
-                    None => todo!(),
-                };
+    fn handle(&mut self, request: Request) -> Result<(), Failure> {
+        match request.validate() {
+            Some(failure) => Err(failure),
+            None => {
+                match request {
+                    Request::PlaceOrder(p) => {
+                        let order = p.to_order();
+                        return match self.books.get_mut(&order.trading_pair) {
+                            Some(book) => {
+                                // should be replaced with a thread pool in subsequent iterations
+                                self.matcher.match_order(order, book);
+                                Ok(())
+                            }
+                            None => Err(Failure::BookNotFound(format!(
+                                "No book found for trading pair {:?}",
+                                p.trading_pair
+                            ))),
+                        };
+                    }
+                    Request::Cancel(r) => {
+                        return match self.books.get_mut(&r.trading_pair) {
+                            Some(book) => {
+                                // this should run on a separate thread of execution, utilizing a thread pool
+                                let _ = book.cancel(r.orderid);
+                                Ok(())
+                            }
+                            None => Err(Failure::BookNotFound(format!(
+                                "No book found for trading pair {:?}",
+                                r.trading_pair
+                            ))),
+                        };
+                    }
+                }
             }
         }
     }
@@ -91,5 +132,53 @@ where
 
 #[cfg(test)]
 mod test {
+    use rust_decimal_macros::dec;
+
+    use crate::core::{orderbook::LimitOrderBook, types::Asset};
+
     use super::*;
+
+    #[test]
+    fn placing_an_order_in_an_empty_book_should_fail() {
+        let request = Request::PlaceOrder(PlaceOrder {
+            price: dec!(300.00),
+            quantity: 2,
+            side: OrderSide::Bid,
+            order_type: OrderType::Limit,
+            trading_pair: TradingPair::from(Asset::BTC, Asset::USDC),
+        });
+
+        let mut router: OrderRouter<LimitOrderBook> = OrderRouter::new();
+        let result = router.handle(request);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap(),
+            Failure::BookNotFound(
+                format!(
+                    "No book found for trading pair {:?}",
+                    TradingPair::from(Asset::BTC, Asset::USDC)
+                )
+                .to_string()
+            )
+        )
+    }
+
+    #[test]
+    fn an_invalid_order_should_fail_placement() {
+        let request = Request::PlaceOrder(PlaceOrder {
+            price: dec!(300.00),
+            quantity: 0,
+            side: OrderSide::Bid,
+            order_type: OrderType::Limit,
+            trading_pair: TradingPair::from(Asset::BTC, Asset::USDC),
+        });
+
+        let mut router: OrderRouter<LimitOrderBook> = OrderRouter::new();
+        let result = router.handle(request);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap(),
+            Failure::OrderRejected("Quantity must be greater than zero".to_string(),)
+        )
+    }
 }

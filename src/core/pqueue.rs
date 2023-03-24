@@ -78,10 +78,7 @@ mod test {
                 OrderSide::Bid,
                 4,
                 OrderType::Limit,
-                TradingPair {
-                    order_asset: Asset::BTC,
-                    price_asset: Asset::USDC,
-                },
+                TradingPair::from(Asset::BTC, Asset::USDC),
                 1678170180000,
             ),
             create_order(
@@ -89,10 +86,7 @@ mod test {
                 OrderSide::Bid,
                 10,
                 OrderType::Limit,
-                TradingPair {
-                    order_asset: Asset::DOT,
-                    price_asset: Asset::USDT,
-                },
+                TradingPair::from(Asset::DOT, Asset::USDT),
                 1680848580000,
             ),
         ];
@@ -117,10 +111,7 @@ mod test {
                 OrderSide::Bid,
                 4,
                 OrderType::Limit,
-                TradingPair {
-                    order_asset: Asset::BTC,
-                    price_asset: Asset::USDC,
-                },
+                TradingPair::from(Asset::BTC, Asset::USDC),
                 1678170180000,
             ),
             create_order(
@@ -128,10 +119,7 @@ mod test {
                 OrderSide::Bid,
                 12,
                 OrderType::Limit,
-                TradingPair {
-                    order_asset: Asset::ETH,
-                    price_asset: Asset::USDT,
-                },
+                TradingPair::from(Asset::ETH, Asset::USDT),
                 1680848580000,
             ),
         ];
@@ -151,10 +139,7 @@ mod test {
             OrderSide::Bid,
             8,
             OrderType::Limit,
-            TradingPair {
-                order_asset: Asset::DOT,
-                price_asset: Asset::USDT,
-            },
+            TradingPair::from(Asset::DOT, Asset::USDT),
             1678170180000,
         );
 
@@ -174,10 +159,7 @@ mod test {
             OrderSide::Bid,
             8,
             OrderType::Limit,
-            TradingPair {
-                order_asset: Asset::ETH,
-                price_asset: Asset::USDC,
-            },
+            TradingPair::from(Asset::ETH, Asset::USDC),
             1678170180000,
         );
 

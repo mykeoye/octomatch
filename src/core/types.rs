@@ -47,10 +47,12 @@ pub enum OrderStatus {
     Expired,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Failure<'a> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Failure {
     InvalidOrderForBook,
-    OrderNotFound(&'a str),
-    OrderRejected(&'a str),
-    UnsupportedOperation(&'a str),
+    OrderNotFound(String),
+    BookNotFound(String),
+    OrderRejected(String),
+    UnsupportedOperation(String),
+    InvalidTradingPair(String),
 }

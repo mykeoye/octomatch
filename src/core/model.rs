@@ -3,7 +3,7 @@ use std::{cmp::Ordering, fmt::Debug};
 
 use super::{
     pqueue::Keyable,
-    types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType, TimestampMillis},
+    types::{Asset, Failure, Long, OrderId, OrderSide, OrderStatus, OrderType, TimestampMillis},
 };
 
 #[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
@@ -32,6 +32,26 @@ impl Order {
 pub struct TradingPair {
     pub order_asset: Asset,
     pub price_asset: Asset,
+}
+
+impl TradingPair {
+    pub fn from(order_asset: Asset, price_asset: Asset) -> Self {
+        Self {
+            order_asset,
+            price_asset,
+        }
+    }
+}
+
+impl TradingPair {
+    pub fn validate(&self) -> Option<Failure> {
+        if self.order_asset == self.price_asset {
+            return Some(Failure::OrderRejected(
+                "Trading pair must be different for price and order asset type".to_string(),
+            ));
+        }
+        None
+    }
 }
 
 #[derive(Debug)]
