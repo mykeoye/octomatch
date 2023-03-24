@@ -67,10 +67,10 @@ pub enum MatchState {
     NoMatch,
 }
 
-pub struct Matcher {}
+pub struct Matcher;
 
 impl Matcher {
-    pub fn match_order(&self, order: Order, orderbook: &mut dyn OrderBook) -> Match<Trade> {
+    pub fn match_order<T: OrderBook>(&self, order: Order, orderbook: &mut T) -> Match<Trade> {
         let mut matches = Match::new();
         match order.order_type {
             // a market order is matched immediately at the best available price. In cases
@@ -232,34 +232,30 @@ impl Matcher {
 mod test {
     use rust_decimal::Decimal;
     use rust_decimal_macros::dec;
+    use uuid::Uuid;
 
     use crate::core::{
         model::TradingPair,
         orderbook::LimitOrderBook,
-        types::{Asset, Long, OrderId},
+        types::{Asset, Long},
+        utils::Util,
     };
 
     use super::*;
 
     #[test]
     fn an_empty_orderbook_should_have_no_executed_trades() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::ETH,
-            price_asset: Asset::USDC,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let matcher = Matcher {};
-        let order = create_order(11, OrderSide::Ask, dec!(2.22), OrderType::Market, 100);
+        let order = create_order(OrderSide::Ask, dec!(2.22), OrderType::Market, 100);
         let matches = matcher.match_order(order, &mut orderbook);
         assert_eq!(matches.get_state(), MatchState::NoMatch);
     }
 
     #[test]
     fn a_market_bid_is_fully_matched_in_a_non_empty_orderbook_with_matching_asks() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::ETH,
-            price_asset: Asset::USDC,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let asks = create_orders(OrderSide::Ask);
         for ask in &asks {
@@ -267,7 +263,7 @@ mod test {
         }
 
         let matcher = Matcher {};
-        let bid = create_order(14, OrderSide::Bid, dec!(100.00), OrderType::Market, 100);
+        let bid = create_order(OrderSide::Bid, dec!(100.00), OrderType::Market, 100);
         let matches = matcher.match_order(bid, &mut orderbook);
 
         let trades = matches.get_matches();
@@ -305,10 +301,7 @@ mod test {
 
     #[test]
     fn a_limit_order_is_partially_matched_if_price_limits_are_met_with_low_volume() {
-        let mut orderbook = LimitOrderBook::init(TradingPair {
-            order_asset: Asset::ETH,
-            price_asset: Asset::USDC,
-        });
+        let mut orderbook = LimitOrderBook::init(TradingPair::from(Asset::ETH, Asset::USDC));
 
         let bids = create_orders(OrderSide::Bid);
         for bid in &bids {
@@ -316,7 +309,7 @@ mod test {
         }
 
         let matcher = Matcher {};
-        let order = create_order(11, OrderSide::Ask, dec!(5.00), OrderType::Limit, 1000);
+        let order = create_order(OrderSide::Ask, dec!(5.00), OrderType::Limit, 1000);
         let matches = matcher.match_order(order, &mut orderbook);
         assert_eq!(matches.get_state(), MatchState::Partial);
         assert_eq!(matches.get_qty_left(), 800);
@@ -337,31 +330,27 @@ mod test {
     }
 
     fn create_order(
-        orderid: OrderId,
         side: OrderSide,
         price: Decimal,
         order_type: OrderType,
         quantity: Long,
     ) -> Order {
         Order {
-            orderid,
+            orderid: Uuid::new_v4(),
             price,
             side,
             quantity,
             order_type,
-            timestamp: 1678170180000,
-            trading_pair: TradingPair {
-                order_asset: Asset::ETH,
-                price_asset: Asset::USDC,
-            },
+            timestamp: Util::current_time_millis(),
+            trading_pair: TradingPair::from(Asset::ETH, Asset::USDC),
         }
     }
 
     fn create_orders(side: OrderSide) -> Vec<Order> {
         vec![
-            create_order(12, side, dec!(100.00), OrderType::Limit, 100),
-            create_order(13, side, dec!(40.00), OrderType::Limit, 50),
-            create_order(15, side, dec!(550.00), OrderType::Limit, 50),
+            create_order(side, dec!(100.00), OrderType::Limit, 100),
+            create_order(side, dec!(40.00), OrderType::Limit, 50),
+            create_order(side, dec!(550.00), OrderType::Limit, 50),
         ]
     }
 }

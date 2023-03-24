@@ -1,7 +1,10 @@
 use rust_decimal::Decimal;
 use std::{cmp::Ordering, fmt::Debug};
 
-use super::types::{Asset, Long, OrderId, OrderSide, OrderStatus, OrderType};
+use super::{
+    pqueue::Keyable,
+    types::{Asset, Failure, Long, OrderId, OrderSide, OrderStatus, OrderType, TimestampMillis},
+};
 
 #[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
 pub struct Order {
@@ -10,7 +13,7 @@ pub struct Order {
     pub quantity: Long,
     pub side: OrderSide,
     pub order_type: OrderType,
-    pub timestamp: Long,
+    pub timestamp: TimestampMillis,
     pub trading_pair: TradingPair,
 }
 
@@ -25,10 +28,30 @@ impl Order {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Ord, PartialOrd, Hash, Clone, Debug)]
 pub struct TradingPair {
     pub order_asset: Asset,
     pub price_asset: Asset,
+}
+
+impl TradingPair {
+    pub fn from(order_asset: Asset, price_asset: Asset) -> Self {
+        Self {
+            order_asset,
+            price_asset,
+        }
+    }
+}
+
+impl TradingPair {
+    pub fn validate(&self) -> Option<Failure> {
+        if self.order_asset == self.price_asset {
+            return Some(Failure::OrderRejected(
+                "Trading pair must be different for price and order asset type".to_string(),
+            ));
+        }
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -53,8 +76,10 @@ pub struct OrderKey {
     pub orderid: OrderId,
     pub price: Decimal,
     pub side: OrderSide,
-    pub timestamp: Long,
+    pub timestamp: TimestampMillis,
 }
+
+impl Keyable for OrderKey {}
 
 // The ordering determines how the orders are arranged in the queue. For price time priority
 // ordering, we want orders inserted based on the price and the time of entry. For Bids this

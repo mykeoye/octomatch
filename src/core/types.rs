@@ -1,9 +1,11 @@
 use rust_decimal::Decimal;
+use uuid::Uuid;
 
-pub type OrderId = u64;
+pub type OrderId = Uuid;
 pub type Long = u64;
+pub type TimestampMillis = u128;
 
-#[derive(Eq, PartialEq, Copy, Ord, PartialOrd, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Ord, PartialOrd, Clone, Hash, Debug)]
 pub enum Asset {
     BTC,
     ETH,
@@ -45,10 +47,12 @@ pub enum OrderStatus {
     Expired,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Failure<'a> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Failure {
     InvalidOrderForBook,
-    OrderNotFound(&'a str),
-    OrderRejected(&'a str),
-    UnsupportedOperation(&'a str),
+    OrderNotFound(String),
+    BookNotFound(String),
+    OrderRejected(String),
+    UnsupportedOperation(String),
+    InvalidTradingPair(String),
 }
