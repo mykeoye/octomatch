@@ -181,4 +181,24 @@ mod test {
             Failure::OrderRejected("Quantity must be greater than zero".to_string(),)
         )
     }
+
+    #[test]
+    fn a_valid_order_should_be_routed_successfully() {
+        let trading_pair = TradingPair::from(Asset::BTC, Asset::USDC);
+
+        let request = Request::PlaceOrder(PlaceOrder {
+            price: dec!(300.00),
+            quantity: 10,
+            side: OrderSide::Bid,
+            order_type: OrderType::Limit,
+            trading_pair: trading_pair,
+        });
+
+        let mut router: OrderRouter<LimitOrderBook> = OrderRouter::with_books(HashMap::from([(
+            TradingPair::from(Asset::BTC, Asset::USDC),
+            LimitOrderBook::init(trading_pair),
+        )]));
+        let result = router.handle(request);
+        assert!(result.is_ok())
+    }
 }
