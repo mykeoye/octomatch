@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, sync::Mutex, convert};
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -96,6 +96,7 @@ where
                     return self
                         .books
                         .try_lock()
+                        .map_err(|_| Failure::EngineOverCapacity)
                         .map(|mut book| match book.get_mut(&order.trading_pair) {
                             Some(book) => {
                                 dbg!(self.matcher.match_order(order, book));
@@ -106,13 +107,13 @@ where
                                 p.trading_pair
                             ))),
                         })
-                        .map_err(|_| Failure::EngineOverCapacity)
-                        .map(|_| {});
+                        .and_then(convert::identity);
                 }
                 Request::Cancel(cancel) => {
                     return self
                         .books
                         .try_lock()
+                        .map_err(|_| Failure::EngineOverCapacity)
                         .map(|mut book| match book.get_mut(&cancel.trading_pair) {
                             Some(book) => {
                                 let _ = book.cancel(cancel.orderid);
@@ -123,8 +124,7 @@ where
                                 cancel.trading_pair
                             ))),
                         })
-                        .map_err(|_| Failure::EngineOverCapacity)
-                        .map(|_| {});
+                        .and_then(convert::identity);
                 }
             },
         }
@@ -151,6 +151,7 @@ mod test {
 
         let router: Router<LimitOrderBook> = Router::new();
         let result = router.handle(request);
+        dbg!(&result);
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap(),
