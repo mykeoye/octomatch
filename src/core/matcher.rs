@@ -66,7 +66,7 @@ pub enum MatchState {
     Partial,
     NoMatch,
 }
-
+#[derive(Debug)]
 pub struct Matcher;
 
 impl Matcher {
