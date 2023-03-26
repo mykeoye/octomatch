@@ -49,6 +49,7 @@ pub enum OrderStatus {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Failure {
+    EngineOverCapacity,
     InvalidOrderForBook,
     OrderNotFound(String),
     BookNotFound(String),
