@@ -56,6 +56,9 @@ pub enum OrderType {
 }
 ```
 
+If you prefer to view the documentation locally, simple run `cargo doc --open` in the root of the project
+in your terminal
+
 ## Future additions
 - Add multi-threaded support
 - Implement a pro-rata matching algorithm

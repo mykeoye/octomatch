@@ -7,7 +7,7 @@ use super::{
 };
 use rust_decimal::Decimal;
 
-/// How large we ie how many items we want the order queues to contain when created
+/// The order queues should be able to hold these number of items when created
 const ORDER_BOOK_INITIAL_CAPACITY: usize = 16;
 
 /// This trait defines the operations that can be performed by the orderbook. It

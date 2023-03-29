@@ -27,8 +27,5 @@ fn main() {
         }));
     }
 
-    CancelOrder::from(
-        Uuid::new_v4(), 
-        TradingPair::from(Asset::BTC, Asset::USDC)
-    );
+    CancelOrder::from(Uuid::new_v4(), TradingPair::from(Asset::BTC, Asset::USDC));
 }

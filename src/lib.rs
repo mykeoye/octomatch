@@ -1,8 +1,8 @@
 //! Octomatch is simple and minimal order matching engine
 //!
 //! This project was created out of the curious need to understand how
-//! matching engines work. It isn't meant to be complete solution
-//! or even a guide
+//! matching engines work. It isn't meant to be complete solution but
+//! it should help as a learning tool.
 //!
 //! The current implementation is single threaded and provides no
 //! interface for sending commands into the system ie it has no
@@ -23,7 +23,7 @@
 //!     };
 //!     use rust_decimal_macros::dec;
 //!     use uuid::Uuid;
-//! 
+//!
 //!     let mut engine = Engine::new(EngineConfig::build(vec![
 //!         TradingPair::from(Asset::BTC, Asset::USDC),
 //!          TradingPair::from(Asset::BTC, Asset::USDT),
