@@ -1,12 +1,13 @@
 use octomatch::{
     core::{
         model::TradingPair,
-        router::{PlaceOrder, Request},
+        router::{CancelOrder, PlaceOrder, Request},
         types::{Asset, OrderSide, OrderType},
     },
     Engine, EngineConfig,
 };
 use rust_decimal_macros::dec;
+use uuid::Uuid;
 
 fn main() {
     let mut engine = Engine::new(EngineConfig::build(vec![
@@ -14,15 +15,20 @@ fn main() {
         TradingPair::from(Asset::BTC, Asset::USDT),
     ]));
 
-    for _ in 1..10 {
+    for _ in 1..5 {
         engine.dispatch(Request::PlaceOrder({
-            PlaceOrder {
-                price: dec!(20.00),
-                quantity: 10,
-                side: OrderSide::Bid,
-                order_type: OrderType::Limit,
-                trading_pair: TradingPair::from(Asset::BTC, Asset::USDC),
-            }
+            PlaceOrder::from(
+                dec!(20.00),
+                10,
+                OrderSide::Bid,
+                OrderType::Limit,
+                TradingPair::from(Asset::BTC, Asset::USDC),
+            )
         }));
     }
+
+    CancelOrder::from(
+        Uuid::new_v4(), 
+        TradingPair::from(Asset::BTC, Asset::USDC)
+    );
 }

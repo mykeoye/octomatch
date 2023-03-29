@@ -7,19 +7,45 @@ use super::{
 };
 use rust_decimal::Decimal;
 
+/// How large we ie how many items we want the order queues to contain when created
 const ORDER_BOOK_INITIAL_CAPACITY: usize = 16;
 
+/// This trait defines the operations that can be performed by the orderbook. It
+/// embodies the basic operations that are typical of an orderbook
 pub trait OrderBook {
+    /// Cancel an open order in the book. Cancelling a non-existent order should fail
     fn cancel(&mut self, orderid: OrderId) -> Result<Event, Failure>;
+
+    /// Place an order into the book, should the order already exists it should also fail
     fn place(&mut self, order: Order) -> Result<Event, Failure>;
+
+    /// Gets the ask at the top of the book (head of the ask queue)
     fn peek_top_ask(&self) -> Option<&Order>;
+
+    /// Gets the bid at the top of the book (head of the bid queue)
     fn peek_top_bid(&self) -> Option<&Order>;
+
+    /// Gets the spread, which is the difference between the top ask and bid prices
     fn get_spread(&self) -> Option<Decimal>;
+
+    /// Allows for the modification of the order quantity in-place
     fn modify_quantity(&mut self, orderid: OrderId, qty: Long);
+
+    /// Removes the top bid from the head of the queue
     fn pop_top_bid(&mut self) -> Option<Order>;
+
+    /// Removes the top ask from the head of the ask queue
     fn pop_top_ask(&mut self) -> Option<Order>;
 }
 
+/// An implementation of the [OrderBook] trait. This implementation uses two queues one for
+/// storing bid order and the other for storing ask orders. Together the form the orderbook
+///
+/// Each [TradingPair] has its own limit book, so there will be N order books at a given time
+/// for N trading pairs. The trading pairs represent the order and price assets been traded
+///
+/// Each orderbook can only trade assets for the trading pair that it supports
+///
 pub struct LimitOrderBook {
     trading_pair: TradingPair,
     bids: PriceTimePriorityOrderQueue<OrderKey>,
@@ -67,7 +93,9 @@ impl OrderBook for LimitOrderBook {
         if self.trading_pair != order.trading_pair {
             return Err(Failure::InvalidOrderForBook);
         }
+
         self.orders.insert(order.orderid, order);
+
         match order.side {
             OrderSide::Bid => self.bids.push(order.to_key()),
             OrderSide::Ask => self.asks.push(order.to_key()),

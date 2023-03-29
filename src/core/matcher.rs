@@ -10,8 +10,13 @@ use super::{
 /// indicating if the match was done in full or partially, along with the quantity left
 #[derive(Debug)]
 pub struct Match<T> {
+    /// list of matches found by the matcher
     matches: Vec<T>,
+
+    /// the state of the match run, can be partial, full or no-match
     state: MatchState,
+
+    /// number of items left to complete a full match
     qty_left: Long,
 }
 
@@ -66,6 +71,8 @@ pub enum MatchState {
     Partial,
     NoMatch,
 }
+/// Implements a matcher with takes an order and its respective book and attempts to find a set
+/// of matching trades (bids to asks and vice-versa)
 #[derive(Debug)]
 pub struct Matcher;
 
