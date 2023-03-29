@@ -1,24 +1,39 @@
 use std::collections::BinaryHeap;
 
-pub trait Keyable: Clone + Ord + PartialEq + Copy {}
+/// A key index is a structure that defines some ordering, as well as information that
+/// allows implementations of the order queue determine priority of items
+pub trait KeyIndx: Clone + Ord + PartialEq + Copy {}
 
-/// Defines the operations to be performed by an order queue. The implementation of this
-/// is a priority queue that orders items based on some defined prioritization strategy
-/// this is left entirely to the implementation of this trait
-pub trait OrderQueue<Key> {
-    fn push(&mut self, key: Key);
-    fn peek(&self) -> Option<&Key>;
-    fn pop(&mut self) -> Option<Key>;
-    fn remove(&mut self, key: Key) -> Option<Key>;
+/// This trait defines the operations that should be performed by the order queue. It is
+/// expected that the backing implemenation be a priority queue.
+///
+/// It is genric over type [T], which is any trait that implements the [KeyIndx] trait.
+///  
+/// [KeyIndx] provides the ordering, which determines how items are prioritized in the queue
+///
+pub trait OrderQueue<T: KeyIndx> {
+    /// Pushes an item into the queue
+    fn push(&mut self, item: T);
+
+    // Gets the item at the head of the queue
+    fn peek(&self) -> Option<&T>;
+
+    /// Removes the item at the head of the queue
+    fn pop(&mut self) -> Option<T>;
+
+    /// Removes the specified item from the queue. This operation rebalances the queue
+    fn remove(&mut self, item: T) -> Option<T>;
 }
 
+/// Simple implemenatation of the order queue. Uses a binary heap as a priority queue
+/// Orders are prioritized by time and price
 pub struct PriceTimePriorityOrderQueue<T> {
     heap: BinaryHeap<T>,
 }
 
 impl<T> PriceTimePriorityOrderQueue<T>
 where
-    T: Keyable,
+    T: KeyIndx,
 {
     pub fn new() -> Self {
         Self {
@@ -34,10 +49,10 @@ where
 
 impl<T> OrderQueue<T> for PriceTimePriorityOrderQueue<T>
 where
-    T: Keyable,
+    T: KeyIndx,
 {
-    fn push(&mut self, key: T) {
-        self.heap.push(key)
+    fn push(&mut self, item: T) {
+        self.heap.push(item)
     }
 
     fn peek(&self) -> Option<&T> {
@@ -48,11 +63,15 @@ where
         self.heap.pop()
     }
 
-    fn remove(&mut self, key: T) -> Option<T> {
+    fn remove(&mut self, item: T) -> Option<T> {
+        // unfortunately this is the most efficient way to do this using a binary heap
+        // rebuilding the binary heap everytime a removal occurs can be costly for large N.
+        // For the time being i'll leave this implementation while i research alternative
+        // representations
         let mut key_vec = self.heap.to_owned().into_vec();
-        key_vec.retain(|k| *k != key);
+        key_vec.retain(|k| *k != item);
         self.heap = key_vec.into();
-        Some(key)
+        Some(item)
     }
 }
 

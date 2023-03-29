@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Mutex, convert};
+use std::{collections::HashMap, convert, sync::Mutex};
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -11,7 +11,7 @@ use super::{
     utils::Util,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Request {
     PlaceOrder(PlaceOrder),
     Cancel(CancelOrder),
@@ -20,29 +20,38 @@ pub enum Request {
 impl Request {
     fn validate(&self) -> Option<Failure> {
         match self {
-            Request::PlaceOrder(p) => {
-                if p.quantity <= 0 {
-                    return Some(Failure::OrderRejected(
-                        "Quantity must be greater than zero".to_string(),
-                    ));
-                }
-                p.trading_pair.validate()
-            }
+            Request::PlaceOrder(p) => p.validate(),
             Request::Cancel(c) => c.trading_pair.validate(),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PlaceOrder {
-    pub price: Decimal,
-    pub quantity: Long,
-    pub side: OrderSide,
-    pub order_type: OrderType,
-    pub trading_pair: TradingPair,
+    price: Decimal,
+    quantity: Long,
+    side: OrderSide,
+    order_type: OrderType,
+    trading_pair: TradingPair,
 }
 
 impl PlaceOrder {
+    pub fn from(
+        price: Decimal,
+        quantity: Long,
+        side: OrderSide,
+        order_type: OrderType,
+        trading_pair: TradingPair,
+    ) -> Self {
+        Self {
+            price,
+            quantity,
+            side,
+            order_type,
+            trading_pair,
+        }
+    }
+
     pub fn to_order(&self) -> Order {
         Order {
             orderid: Uuid::new_v4(),
@@ -54,12 +63,29 @@ impl PlaceOrder {
             timestamp: Util::current_time_millis(),
         }
     }
+    pub fn validate(&self) -> Option<Failure> {
+        if self.quantity <= 0 {
+            return Some(Failure::OrderRejected(
+                "Quantity must be greater than zero".to_string(),
+            ));
+        }
+        return self.trading_pair.validate();
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CancelOrder {
-    pub orderid: OrderId,
-    pub trading_pair: TradingPair,
+    orderid: OrderId,
+    trading_pair: TradingPair,
+}
+
+impl CancelOrder {
+    pub fn from(orderid: OrderId, trading_pair: TradingPair) -> Self {
+        Self {
+            orderid,
+            trading_pair,
+        }
+    }
 }
 
 /// The router interface is responsible for handling different request types and routing an
@@ -99,7 +125,7 @@ where
                         .map_err(|_| Failure::EngineOverCapacity)
                         .map(|mut book| match book.get_mut(&order.trading_pair) {
                             Some(book) => {
-                                dbg!(self.matcher.match_order(order, book));
+                                self.matcher.match_order(order, book);
                                 Ok(())
                             }
                             None => Err(Failure::BookNotFound(format!(

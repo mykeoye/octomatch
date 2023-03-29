@@ -2,7 +2,7 @@ use rust_decimal::Decimal;
 use std::{cmp::Ordering, fmt::Debug};
 
 use super::{
-    pqueue::Keyable,
+    pqueue::KeyIndx,
     types::{Asset, Failure, Long, OrderId, OrderSide, OrderStatus, OrderType, TimestampMillis},
 };
 
@@ -79,7 +79,7 @@ pub struct OrderKey {
     pub timestamp: TimestampMillis,
 }
 
-impl Keyable for OrderKey {}
+impl KeyIndx for OrderKey {}
 
 // The ordering determines how the orders are arranged in the queue. For price time priority
 // ordering, we want orders inserted based on the price and the time of entry. For Bids this
